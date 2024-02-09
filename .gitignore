@@ -5,5 +5,5 @@
 *.log
 *.aux
 *.out
-auto/
-
+src/__pycache__
+output/
