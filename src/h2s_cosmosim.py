@@ -4,7 +4,7 @@ Generic functions dealing with cosmological simulations
 
 #import numpy as np
 
-defaultdz = 0.25
+#defaultdz = 0.25
 
 #def boundary_correction(xin,box,groups=False):
 #    """
@@ -306,58 +306,58 @@ defaultdz = 0.25
 
 
 
-def get_zminmaxs(zz,dz=None,verbose=False):
-    """
-    Get the previous (min) and next (max) values
-    given an array. If the input is a single value 
-    zmaxs = zz+dz, zmins = zz-dz
-
-    Parameters
-    -----------
-    zz : list of floats
-        Redshift 
-    dz : float
-        Optional parameter with an interval
-    verbose : bool
-        If True write out warning messages
-
-    Returns
-    -----
-    zmins : list of floats
-        Minimum redshifts
-    zmaxs : list of floats
-        Maximum redshifts
-
-    Examples
-    ---------
-    >>> import h2s_cosmosim as cs
-    >>> cs.get_zminmaxs([0.,1.])
-    >>> [-1.0, 0.0], [1.0, 2.0]
-    """
-
-    # Check that the input list is sorted
-    if(zz != sorted(zz)):
-        print('STOP (get_zminmaxs): Sort the redshift list')
-        exit()
-        return -999.,-999.
-    
-    if (dz is not None):
-        zmins = [iz - dz for iz in zz]
-        zmaxs = [iz + dz for iz in zz]
-    elif(len(zz)<2):
-        if (verbose):
-            print('\n WARNING (get_zminmaxs): Setting to default dz={}'.format(defaultdz))
-        dz = defaultdz
-        zmins = [iz - dz for iz in zz]
-        zmaxs = [iz + dz for iz in zz]
-    else:
-        zmins = zz[:-1]
-        zmins.insert(0,2*zz[0]-zz[1])
-
-        zmaxs = zz[1:]
-        zmaxs.append(2*zz[-1]-zz[-2]) 
-        
-    return zmins,zmaxs
+#def get_zminmaxs(zz,dz=None,verbose=False):
+#    """
+#    Get the previous (min) and next (max) values
+#    given an array. If the input is a single value 
+#    zmaxs = zz+dz, zmins = zz-dz
+#
+#    Parameters
+#    -----------
+#    zz : list of floats
+#        Redshift 
+#    dz : float
+#        Optional parameter with an interval
+#    verbose : bool
+#        If True write out warning messages
+#
+#    Returns
+#    -----
+#    zmins : list of floats
+#        Minimum redshifts
+#    zmaxs : list of floats
+#        Maximum redshifts
+#
+#    Examples
+#    ---------
+#    >>> import h2s_cosmosim as cs
+#    >>> cs.get_zminmaxs([0.,1.])
+#    >>> [-1.0, 0.0], [1.0, 2.0]
+#    """
+#
+#    # Check that the input list is sorted
+#    if(zz != sorted(zz)):
+#        print('STOP (get_zminmaxs): Sort the redshift list')
+#        exit()
+#        return -999.,-999.
+#    
+#    if (dz is not None):
+#        zmins = [iz - dz for iz in zz]
+#        zmaxs = [iz + dz for iz in zz]
+#    elif(len(zz)<2):
+#        if (verbose):
+#            print('\n WARNING (get_zminmaxs): Setting to default dz={}'.format(defaultdz))
+#        dz = defaultdz
+#        zmins = [iz - dz for iz in zz]
+#        zmaxs = [iz + dz for iz in zz]
+#    else:
+#        zmins = zz[:-1]
+#        zmins.insert(0,2*zz[0]-zz[1])
+#
+#        zmaxs = zz[1:]
+#        zmaxs.append(2*zz[-1]-zz[-2]) 
+#        
+#    return zmins,zmaxs
 
 
 

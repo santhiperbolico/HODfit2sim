@@ -4,20 +4,24 @@ the number of haloes per halo mass bin.
 
 Parameters
 -----------
-npmin  : integer  
-    Minimum number of particles within a halo, to be considered  
 simtype : string
     Simulation type (BAHAMAS, etc)
-env : string
-    ari, arilega or cosma, to use the adecuate paths
 sim : string
     Simulation name
-zz : float
-    Redshift to look
+env : string
+    ari, arilega or cosma, to use the adecuate paths
+snap : float
+    Simulation snapshot at the redshift of interest
 mhname : string
     Name of the halo mass variable
+npmin  : integer  
+    Minimum number of particles within a halo, to be considered  
+dm  : float
+    Size of halo mass bin
 dirz : string
     Path to table with z and snapshot.
+dirout : string
+    Path to output
 verbose : boolean
     True to print the resolution
 Testing : boolean
@@ -25,7 +29,7 @@ Testing : boolean
 
 Examples
 ---------
->>> python3 h2s_gethaoes.py 20 BAHAMAS HIRES/AGN_RECAL_nu0_L100N512_WMAP9 arilega 0.0 True
+>>> python3 h2s_gethaoes.py BAHAMAS HIRES/AGN_RECAL_nu0_L100N512_WMAP9 arilega 0.0 M200 20 0.1
 """
 
 import sys
@@ -33,38 +37,35 @@ import h2s_io as io
 import h2s_hmf as hmf
 
 dirz = None
+dirout = 'output/'
 verbose = True
 Testing = False
 
 # Read the input arguments
-npmin   = int(sys.argv[1])
-simtype = sys.argv[2]
-sim     = sys.argv[3]
-env     = sys.argv[4]
-zz      = float(sys.argv[5])
-mhnom   = sys.argv[6]
-if len(sys.argv)>7:
-    dirz  = sys.argv[7]
+simtype = sys.argv[1]
+sim     = sys.argv[2]
+env     = sys.argv[3]
+snap    = int(sys.argv[4])
+mhnom   = sys.argv[5]
+npmin   = int(sys.argv[6])
+dm      = float(sys.argv[7])
+if len(sys.argv)>8:
+    dirz  = sys.argv[8]
 
-    if len(sys.argv)>8:
-        verbose  = bool(sys.argv[8])
+    if len(sys.argv)>9:
+        dirout  = sys.argv[9]
+        
+        if len(sys.argv)>10:
+            verbose  = bool(sys.argv[10])
 
-        if len(sys.argv)>9:
-            Testing  = bool(sys.argv[9])
+            if len(sys.argv)>11:
+                Testing  = bool(sys.argv[11])
         
 # Get name for the output file and populate it with a header
-
-            
-# Get the snapshot corresponding to the input redshift
-match simtype:                                                                         
-    case 'BAHAMAS':                                                                    
-        from src.h2s_bahamas import get_snap
-        snap, z_snap = get_snap(zz,sim,env,dirz=dirz)                                  
-                                                                                       
-    case other:                                                                        
-        print(f'Type of simulation not recognised: {simtype}'); exit()
+samplefile = io.generate_header(simtype,sim,env,snap,dirout,filetype='sample')
+if verbose: print(f'{samplefile} is the output file')
 
 # Get the edges of the halo mass bins
-edges = hmf.get_medges(npmin,simtype,sim,env,snap,mhnom,dirz=dirz,verbose=verbose,Testing=Testing)
-print(edges)    
+edges = hmf.get_hmf(mhnom,npmin,dm,samplefile,verbose=verbose,Testing=Testing)
+if verbose: print("Number of haloes with masses from {:.2f} to {:.2f}".format(edges[0],edges[-1]))    
 

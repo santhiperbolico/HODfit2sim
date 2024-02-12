@@ -4,29 +4,28 @@ env = 'arilega'
 
 # Simulations and redshifts
 sims = ['HIRES/AGN_RECAL_nu0_L100N512_WMAP9']
-zzs = [0]
+snaps = [31]
 
-# Path for output and files with (z,snapnum)
-output = '/users/arivgonz/output/Junk/'
-dirz = '/users/arivgonz/output/BAHAMAS/'
+# Path for output
+dirout = '/users/arivgonz/output/Junk/'
 
 # Consider haloes with more than npmin particles
 npmin = 20
 
 # Define the halo mass bin size for <HODs>, shuffling and biasf
-dm0 = 0.057  #dex
-#dm_variable = True
+dm0 = 0.057  #dex log10(Msun/h)
 
 # Halo mass to be considered
 mhnom = 'FOF/Group_M_Crit200'
 
 # Target number densities in log10(n/vol) and the properties to be used
-ndtarget = [-2.5]
-propname = ['stellar mass']
+# String with values separated by a space
+ndtarget = '-2.5 -3.5'
+propname = 'stellarmass SFR'
 
 # What part of the code will be run?
-code2run = 'get_haloes' # Produce file with haloes, including number per mass bin
-#code2run = 'get_sample'
+#code2run = 'get_haloes' # Produce file with haloes, including number per mass bin
+code2run = 'get_sample'
 #code2run = 'get_params'
 #code2run = 'run_HOD'
 
@@ -46,29 +45,35 @@ cputask = 1
 
 #--------------End of input parameters-------------------
 import os
+from src.h2s_io import get_file_name
 
 # Executable full path
 path2program = os.getcwd()+'/src/'
 
 counter = 0
 for sim in sims:
-    for zz in zzs:
+    for snap in snaps:
         match code2run:
             case 'get_haloes':
                 program = path2program+'h2s_gethaloes.py'
-                args = str(npmin)+' '+simtype+' '+sim+' '+env+' '+str(zz)+' '+mhnom+' '+dirz+' '+str(verbose)+' '+str(Testing)
+                args = simtype+' '+sim+' '+env+' '+str(snap)+' '+mhnom+' '+str(npmin)+' '+str(dm0)
+                args = args+' '+dirout+' '+str(verbose)+' '+str(Testing)
                 
             case 'get_sample':
                 program = path2program+'h2s_getsample.py'
-                args = str(npmin)+' '+simtype+' '+sim+' '+env+' '+dirz+' '+str(verbose)
+
+                filenom = get_file_name(simtype,sim,snap,dirout,filetype='sample')
+                args = ' --listsim '+filenom
+                args = args+' --listnd '+ndtarget+' --listprop '+propname
+                args = args+' --listbool '+str(verbose)+' '+str(Testing)
                 
             case 'get_params':
                 program = path2program+'h2s_getparams.py'
-                args = str(npmin)+' '+simtype+' '+sim+' '+env+' '+dirz+' '+str(verbose)
+                args = simtype+' '+sim+' '+env+' '
                 
             case 'run_HOD':
                 program = path2program+'h2s_runHOD.py'
-                args = simtype+' '+sim+' '+env+' '+dirz+' '+str(verbose)
+                args = simtype+' '+sim+' '+env+' '
                 
             case other:
                 print(f'Code to run not recognised: {code2run} ({sim}, z={zz})')
@@ -79,7 +84,7 @@ for sim in sims:
         else:
             import time as tt
 
-            log_dir = output+'logs/'
+            log_dir = dirout+'logs/'
             if not os.path.exists(log_dir): os.mkdir(log_dir)
 
             # Name of the submission script
