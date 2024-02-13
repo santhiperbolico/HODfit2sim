@@ -23,6 +23,10 @@ ptypes = ['gas','DM','bp1','bp2','star','BH']
 
 nogroup = 1073741824.
 
+haloXYZnom = 'FOF/GroupCentreOfPotential'
+haloIDnom  = 'Subhalo/GroupNumber'
+subhXYZnom  = 'Subhalo/CentreOfPotential'            
+
 # Default units in Bahamas
 unitdefault = { 
     'volume': '(Mpc/h)^3',
@@ -33,7 +37,7 @@ unitdefault = {
 
 BH_seed_mass = 7.63*10**5 #Msun/h
 
-tblz = 'snap_z.txt'
+#tblz = 'snap_z.txt'
 
 n0 = 3 #Number of digits in file names
 
@@ -141,10 +145,11 @@ def mb2lmsun(massb,verbose=False):
     lmass = massb*0 - 999.
 
     ind = np.where(massb > 0)
-    if(np.shape(ind)[1] < len(massb)):
-        if (verbose): print('\n WARNING (mb2lmsun): Returning -999., where input mass <= 0')
-    else:
+    if(np.shape(ind)[1] > 0.):
         lmass[ind] = np.log10(massb[ind]) + 10.
+
+        if(np.shape(ind)[1] < len(massb) and (verbose)):
+            print('\n WARNING (mb2lmsun): Returning -999., where input mass <= 0')
         
     return lmass
 
@@ -901,7 +906,7 @@ def get_z(snap,sim,env):
 #
 #
 #
-def get_subfind_prop(snap,sim,env,propdef,proptype=None,Testing=False,nfiles=2,verbose=False):
+def get_subfind_prop(snap,sim,env,propdef,proptype=None,verbose=False,Testing=False,nfiles=2):
     """
     Get an array with a given property from the Subfind output
 

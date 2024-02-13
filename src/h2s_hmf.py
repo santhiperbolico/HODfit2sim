@@ -90,7 +90,7 @@ def get_hmf(mhnom,npmin,dm,filenom,verbose=True,Testing=False):
     match simtype: 
         case 'BAHAMAS':
             from src.h2s_bahamas import get_subfind_prop, mb2lmsun
-            mb = get_subfind_prop(snap,sim,env,mhnom,Testing=Testing,nfiles=2,verbose=verbose)
+            mb = get_subfind_prop(snap,sim,env,mhnom,verbose=verbose,Testing=Testing)
             mhalo = mb2lmsun(mb,verbose=verbose)
             
         case other:

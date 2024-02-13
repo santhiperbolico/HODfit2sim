@@ -1,3 +1,9 @@
+# What part of the code will be run?
+code2run = 'get_haloes' # Produce file with haloes, including number per mass bin
+#code2run = 'get_sample'  # Make a cut in one property to generate (shuffled) samples
+#code2run = 'get_params'
+#code2run = 'run_HOD'
+
 # Name of the simulation and work environment
 simtype = 'BAHAMAS'
 env = 'arilega'
@@ -21,13 +27,7 @@ mhnom = 'FOF/Group_M_Crit200'
 # Target number densities in log10(n/vol) and the properties to be used
 # String with values separated by a space
 ndtarget = '-2.5 -3.5'
-propname = 'stellarmass SFR'
-
-# What part of the code will be run?
-#code2run = 'get_haloes' # Produce file with haloes, including number per mass bin
-code2run = 'get_sample'
-#code2run = 'get_params'
-#code2run = 'run_HOD'
+propname = 'Subhalo/Mass_030kpc'
 
 # Are test plots to be produced? 
 tet_plots = True

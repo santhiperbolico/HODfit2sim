@@ -176,7 +176,7 @@ def generate_header(simtype,sim,env,snap,dirout,filetype='example'):
 
     # Get the file name
     filenom = get_file_name(simtype,sim,snap,dirout,filetype=filetype)
-    
+
     # Get cosmology, the simulation box side in Mpc/h and the redshift
     match simtype:                                                                             
         case 'BAHAMAS':                                                                        
@@ -209,6 +209,12 @@ def generate_header(simtype,sim,env,snap,dirout,filetype='example'):
     return filenom
     
 
+def write_halo_props(mhmin,mhmax,mhnom,samplefile,verbose=True,Testing=False):
+    dsnom = 'haloes'
+    
+    return dsnom
+
+
 if __name__== "__main__":
    
     infile = 'blu'
@@ -229,4 +235,6 @@ if __name__== "__main__":
     sim = 'HIRES/AGN_RECAL_nu0_L100N512_WMAP9'; env = 'arilega'
     snap = 31
     dirout = '/users/arivgonz/output/Junk/'
-    print(generate_header(simtype,sim,env,snap,dirout))
+    fileout = generate_header(simtype,sim,env,snap,dirout)
+    print(fileout)
+    print(write_halo_props(10.,15.,'FOF/Group_M_Crit200',fileout,verbose=True,Testing=True))

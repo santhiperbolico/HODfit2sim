@@ -50,22 +50,22 @@ mhnom   = sys.argv[5]
 npmin   = int(sys.argv[6])
 dm      = float(sys.argv[7])
 if len(sys.argv)>8:
-    dirz  = sys.argv[8]
-
+    dirout  = sys.argv[8]
+        
     if len(sys.argv)>9:
-        dirout  = sys.argv[9]
+        verbose  = bool(sys.argv[9])
         
         if len(sys.argv)>10:
-            verbose  = bool(sys.argv[10])
+            Testing  = bool(sys.argv[10])
 
-            if len(sys.argv)>11:
-                Testing  = bool(sys.argv[11])
-        
 # Get name for the output file and populate it with a header
 samplefile = io.generate_header(simtype,sim,env,snap,dirout,filetype='sample')
-if verbose: print(f'{samplefile} is the output file')
+if verbose: print(f'* Output file:\n   {samplefile}')
 
 # Get the edges of the halo mass bins
 edges = hmf.get_hmf(mhnom,npmin,dm,samplefile,verbose=verbose,Testing=Testing)
 if verbose: print("Number of haloes with masses from {:.2f} to {:.2f}".format(edges[0],edges[-1]))    
 
+# Write halo properties (ID, position and mass) within the new file
+dataset = io.write_halo_props(edges[0],edges[-1],mhnom,samplefile,verbose=verbose,Testing=Testing)
+if verbose: print(f'Data set with halo information: {dataset}')    
