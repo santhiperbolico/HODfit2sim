@@ -107,7 +107,7 @@ def print_h5attr(infile,inhead='Header'):
 #    return ' '
 
 
-def get_file_name(simtype,sim,snap,dirout,filetype='example'):
+def get_file_name(simtype,sim,snap,mhnom,dirout,filetype='example'):
     """
     Get the name of the file containing the samples information
 
@@ -119,6 +119,8 @@ def get_file_name(simtype,sim,snap,dirout,filetype='example'):
         Name of the simulation
     snap : integer
         Snapshot number for the redshift of interest
+    mhnom : string 
+        Name of the halo mass to be used
     dirout : string
         Path to output
     filetype : string
@@ -131,20 +133,26 @@ def get_file_name(simtype,sim,snap,dirout,filetype='example'):
 
     Examples
     ---------
-    >>> import h2s_io as io
-    >>> io.get_file_name('BAHAMAS','L050N256/WMAP9',33,'/users/arivgonz/output/Junk/')
-    """    
+    >> from h2s_io import get_file_name
+    >> get_file_name('BAHAMAS','L050N256/WMAP9',33,'FOF/Group_M_Crit200','/users/arivgonz/output/Junk/')
+    """
+    
     path2file = dirout+simtype+'/'+sim
     # Generate the directory if needed
     create_dir(path2file)
 
-    filenom = path2file+'/'+filetype+'_snap'+str(snap)+'.hdf5'
+    # Include the name of the halo mass in the path
+    mpath = mhnom.replace("_","")
+    if ('/' in mhnom):
+        mpath = mpath.split('/')[1]
+
+    filenom = path2file+'/'+filetype+'_mh'+mpath+'_snap'+str(snap)+'.hdf5'
     
     return filenom
     
 
 
-def generate_header(simtype,sim,env,snap,dirout,filetype='example'):
+def generate_header(simtype,sim,env,snap,mhnom,dirout,filetype='example'):
     """
     Get the name of the file containing the samples information
 
@@ -158,6 +166,8 @@ def generate_header(simtype,sim,env,snap,dirout,filetype='example'):
         Working environment
     snap : integer
         Snapshot number for the redshift of interest
+    mhnom : string 
+        Name of the halo mass to be used
     dirout : string
         Path to output
     filetype : string
@@ -175,7 +185,7 @@ def generate_header(simtype,sim,env,snap,dirout,filetype='example'):
     """
 
     # Get the file name
-    filenom = get_file_name(simtype,sim,snap,dirout,filetype=filetype)
+    filenom = get_file_name(simtype,sim,snap,mhnom,dirout,filetype=filetype)
 
     # Get cosmology, the simulation box side in Mpc/h and the redshift
     match simtype:                                                                             
@@ -204,16 +214,11 @@ def generate_header(simtype,sim,env,snap,dirout,filetype='example'):
     head.attrs[u'lambda0']      = lambda0        
     head.attrs[u'h0']           = h0
     head.attrs[u'boxside']      = boxside  #Mpc/h
+    head.attrs[u'mhnom']        = mhnom
     hf.close()
     
     return filenom
     
-
-def write_halo_props(mhmin,mhmax,mhnom,samplefile,verbose=True,Testing=False):
-    dsnom = 'haloes'
-    
-    return dsnom
-
 
 if __name__== "__main__":
    
@@ -234,7 +239,7 @@ if __name__== "__main__":
     simtype = 'BAHAMAS'
     sim = 'HIRES/AGN_RECAL_nu0_L100N512_WMAP9'; env = 'arilega'
     snap = 31
+    mhnom = 'FOF/Group_M_Crit200'
     dirout = '/users/arivgonz/output/Junk/'
-    fileout = generate_header(simtype,sim,env,snap,dirout)
-    print(fileout)
-    print(write_halo_props(10.,15.,'FOF/Group_M_Crit200',fileout,verbose=True,Testing=True))
+    print(generate_header(simtype,sim,env,snap,mhnom,dirout))
+
