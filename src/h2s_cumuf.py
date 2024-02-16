@@ -1,18 +1,18 @@
 import numpy as np
 import h5py
 
-def get_cumuf(prop,filenom,proptype=None,verbose=True,Testing=False):    
+def get_cumuf(filenom,prop,proptype=None,verbose=True,Testing=False):    
     """
     Get the cumulative function for a given property
 
     Parameters
     -----------
+    filenom : string
+        Name of the input and output file
     prop : string
         Name of the property, including path within hdf5 file
     proptype : string
         'DM', 'star', 'gas', 'BH', etc. for relevant properties 
-    filenom : string
-        Name of the input and output file
     verbose : boolean
         True to print the resolution
     Testing: boolean
@@ -36,8 +36,7 @@ def get_cumuf(prop,filenom,proptype=None,verbose=True,Testing=False):
     sim     = header.attrs['sim']
     env     = header.attrs['workenv']
     snap    = header.attrs['snapshot']
-    mhmin   = f['hmf/Mh_low'][0]
-    mhmax   = f['hmf/Mh_high'][-1]
+    haloID   = f['haloes/haloID'][:]
     f.close()
 
     # Read the property
@@ -47,18 +46,21 @@ def get_cumuf(prop,filenom,proptype=None,verbose=True,Testing=False):
             val1 = get_subfind_prop(snap,sim,env,prop,proptype=proptype,
                                       Testing=Testing,verbose=verbose)
             if ('mass' in prop or 'Mass' in prop):
-                print(val1[0:5])
-                vals = mb2lmsun(val1,verbose=verbose)
-            else:
-                vals = val1
+                val1 = mb2lmsun(val1,verbose=verbose)
+            hid = get_subfind_prop(snap,sim,env,'Subhalo/GroupNumber',
+                                   Testing=Testing,verbose=verbose)
             
         case other:
             print(f'Type of simulation not recognised: {simtype}'); return None
 
-    pmin = max = np.max(mhalo)
-    #
-    ## Define the limits of the mass bins
-    #medges = np.array(np.arange(mmin,mmax,dm))
+    # Consider only massive enough haloes
+    mask = np.isin(hid, haloID)  # Boolean mask checking IDs are within haloID
+    ind = np.where(mask)[0]      # Get the indices where mask is True
+    vals = val1[ind] ; val1=[]
+
+    # Define the limits of the property
+    dx = 0.2 ##here to call get_binFD  
+    #edges = np.array(np.arange(min(vals),max(vals),dx))
     #elow  = medges[:-1]
     #ehigh = medges[1:] 
     #

@@ -1,6 +1,6 @@
 # What part of the code will be run?
-code2run = 'get_haloes' # Produce file with haloes, including number per mass bin
-#code2run = 'get_sample'  # Make a cut in one property to generate (shuffled) samples
+#code2run = 'get_haloes' # Produce file with haloes, including number per mass bin
+code2run = 'get_sample'  # Make a cut in one property to generate (shuffled) samples
 #code2run = 'get_params'
 #code2run = 'run_HOD'
 
@@ -28,6 +28,7 @@ mhnom = 'FOF/Group_M_Crit200'
 # String with values separated by a space
 ndtarget = '-2.5 -3.5'
 propname = 'Subhalo/Mass_030kpc'
+proptype = 'star'
 
 # Are test plots to be produced? 
 tet_plots = True
@@ -62,9 +63,9 @@ for sim in sims:
             case 'get_sample':
                 program = path2program+'h2s_getsample.py'
 
-                filenom = get_file_name(simtype,sim,snap,dirout,filetype='sample')
-                args = ' --listsim '+filenom
-                args = args+' --listnd '+ndtarget+' --listprop '+propname
+                filenom = get_file_name(simtype,sim,snap,mhnom,dirout,filetype='sample')
+                args = ' --listsim '+filenom+' --listnd '+ndtarget
+                args = args+' --listprop '+propname+' --listproptype '+proptype
                 args = args+' --listbool '+str(verbose)+' '+str(Testing)
                 
             case 'get_params':

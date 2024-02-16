@@ -67,10 +67,10 @@ mhmin = hmf.get_mhmin(npmin,samplefile,verbose=verbose,Testing=Testing)
 if verbose: print("* log10(Min. halo mass/Msun/h) = {:.2f}".format(mhmin))
 
 # Write halo properties (ID, position and mass) within the new file
-dataset = hmf.write_halo_props(mhmin,samplefile,verbose=verbose,Testing=Testing)
-if verbose: print(f'Data set with halo information: {dataset}')    
+nhtot, nhdrop = hmf.write_halo_props(mhmin,samplefile,verbose=verbose,Testing=Testing)
+if verbose: print(f'* Number of haloes dropped = {nhdrop}')    
 
 # Write the halo mass function
 edges = hmf.get_hmf(mhmin,dm,samplefile,verbose=verbose,Testing=Testing)
-if verbose: print("Number of haloes with masses from {:.2f} to {:.2f}".format(edges[0],edges[-1]))    
-edges =[10.]
+if verbose: print("* Number of haloes with masses from {:.2f} to {:.2f} = {}".format(edges[0],edges[-1],nhtot))    
+

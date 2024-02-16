@@ -121,6 +121,8 @@ def write_halo_props(mhmin,filenom,verbose=True,Testing=False):
     
     # Impose minimum mass cut
     ind = np.where(mh > mhmin)
+    nhdrop = len(mh) - np.shape(ind)[1]
+    nhtot  = np.shape(ind)[1]
     if(np.shape(ind)[1] > 0):
         mhalo = mh[ind]; mh=[]
         haloID = index[ind]; index=[]
@@ -142,7 +144,7 @@ def write_halo_props(mhmin,filenom,verbose=True,Testing=False):
     f[dsnom+'haloY'].dims[0].label = 'Y coordinate for the halo center of potential (cMpc/h)'
     f[dsnom+'haloZ'].dims[0].label = 'Z coordinate for the halo center of potential (cMpc/h)'    
     
-    return dsnom
+    return nhtot,nhdrop
 
 
 

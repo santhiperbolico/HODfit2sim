@@ -47,6 +47,13 @@ clo.add_argument(
 )
 
 clo.add_argument(
+  "--listproptype",
+  nargs="*",
+  type=list_of_strings, 
+  default=['star'],
+)
+
+clo.add_argument(
   "--listbool",
   nargs="*",
   type=bool, 
@@ -59,12 +66,14 @@ args = clo.parse_args()
 filenom = args.listsim[0]
 nds = args.listnd
 props = args.listprop
+proptypes = args.listproptype
 verbose, Testing = args.listbool
-print(filenom); exit()
-for prop in props:
+for ip, prop in enumerate(props):
+    proptype = proptypes[ip]
+    
     # Construct a cumulative function on the property
-    cumuf = get_cumuf(prop,filenom,verbose=verbose,Testing=Testing)
-    if verbose: print(f'Cumulative function for {prop}:\n {filenom}/{cumuf}')
+    cumuf = get_cumuf(filenom,prop,proptype=proptype,verbose=verbose,Testing=Testing)
+    if verbose: print(f'* Cumulative function for {prop}:\n {filenom}/{cumuf}')
 #
 ## Get the edges of the halo mass bins
 #edges = hmf.get_hmf(mhnom,npmin,dm,samplefile,verbose=verbose,Testing=Testing)
