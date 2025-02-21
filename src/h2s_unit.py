@@ -32,6 +32,8 @@ def get_galfiles(snap,sim,env):
     allfiles = True
     if (env == 'laptop'):
         outff = ['/Users/Usuario/Documents/Master_Fisica_Teorica/TFM/UNITSIM1_model_z1.321_ELGs_l10000000.h5']
+    elif (env == 'taurus'):
+        outff = ['/home/aknebe/Projects/UNITSIM/SAMs/SAGE/ELGs/UNITSIM1/UNITSIM1_model_z1.321_ELGs.h5']
 
     return outff, allfiles
 

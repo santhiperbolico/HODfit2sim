@@ -283,6 +283,9 @@ def get_params_gal(halo_file, snap, sim, env, flux_cut, M_min, M_max, N_bin, out
 
     return output_file
 
+#/home2/guillermo/out_90p_UNIT1_fnl100_1Gpc_x_y_z_vx_vy_vz_M_.txt   Condiciones iniciales distintas
+#/home2/guillermo/Halos_tree_DOC_PID_Vmax_all_Mass_fixedAmp_002.txt   Condiciones iniciales normales
+
 aa = get_params_gal("/Users/Usuario/Documents/Master_Fisica_Teorica/TFM/unit_fixedAmp_002.10000000.txt",[31], 'UNIT', 'laptop', 1.041e-16, 10.5, 16.5, 60, 'resultados.h5', testing = False, verbose = True)
 
 
