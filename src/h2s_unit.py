@@ -38,6 +38,8 @@ def get_galfiles(snap,sim,env):
     return outff, allfiles
 
 
+
+
 def get_subfind_prop(snap,sim,env,propdef,proptype=None,verbose=False,Testing=False,nfiles=2):
     """
     Get an array with a given property from the Subfind output
