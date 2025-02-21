@@ -5,8 +5,7 @@ code2run = 'get_sample'  # Make a cut in one property to generate (shuffled) sam
 #code2run = 'run_HOD'
 
 # Name of the simulation and work environment
-#simtype = 'BAHAMAS'; env = 'arilega'
-simtype = 'UNIT'; env = 'laptop'
+simtype = 'BAHAMAS'; env = 'arilega'
 
 # Simulations and redshifts
 #sims = ['HIRES/AGN_RECAL_nu0_L100N512_WMAP9']; snaps = [31]

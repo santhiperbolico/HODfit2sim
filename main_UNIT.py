@@ -1,21 +1,20 @@
 # What part of the code will be run?
 #code2run = 'get_haloes' # Produce file with haloes, including number per mass bin
-code2run = 'get_sample'  # Make a cut in one property to generate (shuffled) samples
+code2run = 'get_params'  # Make a cut in one property to generate (shuffled) samples
 #code2run = 'get_params'
 #code2run = 'run_HOD'
 
 # Name of the simulation and work environment
-#simtype = 'BAHAMAS'; env = 'arilega'
 simtype = 'UNIT'; env = 'laptop'
 
 # Simulations and redshifts
 #sims = ['HIRES/AGN_RECAL_nu0_L100N512_WMAP9']; snaps = [31]
 snaps = [31]
-sims = 
+sims = ['UNIT']
 
 # Path for output
 #dirout = '/users/arivgonz/output/Junk/'
-dirout = '/users/arivgonz/output/Junk/' # Cambiar por directorio junk
+dirout = '/Users/Usuario/HODFIT2SIM/Junk/' # Cambiar por directorio junk
 
 # Consider haloes with more than npmin particles
 npmin = 20
@@ -39,7 +38,7 @@ verbose = True
 Testing = True
 
 # Use slurm queues?
-use_slurm = False
+use_slurm = False  # Mandar colas en Taurus
 partition = 'test'   # test or compute
 time = '09:30:00'    #Format: d-hh:mm:ss
 nodes = 1
@@ -48,7 +47,7 @@ cputask = 1
 
 #--------------End of input parameters-------------------
 import os
-from src.h2s_io import get_file_name
+#from src.h2s_io import get_file_name
 
 # Executable full path
 path2program = os.getcwd()+'/src/'
@@ -70,8 +69,8 @@ for sim in sims:
                 args = args+' --listprop '+propname+' --listproptype '+proptype
                 args = args+' --listbool '+str(verbose)+' '+str(Testing)
                 
-            case 'get_params':
-                program = path2program+'h2s_getparams.py'
+            case 'get_sim_params':
+                program = path2program+'prueba.py'
                 args = simtype+' '+sim+' '+env+' '
                 
             case 'run_HOD':
@@ -83,7 +82,7 @@ for sim in sims:
 
         # Submit the jobs
         if not use_slurm:
-            os.system(f'python3 {program} {args}')
+            os.system(f'python {program} {args}')
         else:
             import time as tt
 

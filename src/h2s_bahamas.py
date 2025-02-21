@@ -7,8 +7,8 @@ import glob
 #import subprocess
 #import pandas as pd
 #import astro as ast
-import src.h2s_cosmosim as cs
-import src.h2s_io as io
+import h2s_cosmosim as cs
+import h2s_io as io
 #from astropy import constants as const
 
 # Username and paths

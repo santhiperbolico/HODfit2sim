@@ -1,7 +1,8 @@
 import os.path
 import sys
 import h5py
-
+import numpy as np
+import h2s_const as const
 
 #class nf(float):
 #    '''
@@ -190,7 +191,7 @@ def generate_header(simtype,sim,env,snap,mhnom,dirout,filetype='example'):
     # Get cosmology, the simulation box side in Mpc/h and the redshift
     match simtype:                                                                             
         case 'BAHAMAS':                                                                        
-            from src.h2s_bahamas import get_cosmology, get_z
+            from h2s_bahamas import get_cosmology, get_z
             omega0, omegab, lambda0, h0, boxside = get_cosmology(sim,env)
             zz = get_z(snap,sim,env)
             
@@ -219,6 +220,196 @@ def generate_header(simtype,sim,env,snap,mhnom,dirout,filetype='example'):
     
     return filenom
     
+def get_nheader(infile,firstchar=None):
+    '''
+    Given a text file with a structure: header+data, 
+    counts the number of header lines
+
+    Parameters
+    -------
+    infile : string
+        Input file
+
+    Returns
+    -------
+    ih : integer
+        Number of lines with the header text
+    '''
+
+
+    ih = 0
+    with open(infile,'r') as ff:
+        for line in ff:
+            if not line.strip():
+                # Count any empty lines in the header
+                ih += 1
+            else:
+                sline = line.strip()
+                
+                # Check that the first character is not a digit
+                char1 = sline[0]
+                word1 = sline.split()[0]
+                if not firstchar:
+                    if (not char1.isdigit()):
+                        if (char1 != '-'):
+                            ih += 1
+                        else:
+                            try:
+                                float(word1)
+                                return ih
+                            except:
+                                ih += 1
+                    else:
+                        return ih
+                else:
+                    if char1 == firstchar:
+                        ih+=1
+    return ih
+        
+
+
+def get_selection(infile, inputformat='hdf5',
+                  cutcols=None, mincuts=[None], maxcuts=[None],
+                  testing=False,verbose=False):
+    '''
+    Get indexes of selected galaxies
+
+    Parameters
+    ----------
+    infile : strings
+     List with the name of the input files. 
+     - In text files (*.dat, *txt, *.cat), columns separated by ' '.
+     - In csv files (*.csv), columns separated by ','.
+    inputformat : string
+     Format of the input file.
+    cutcols : list
+     Parameters to look for cutting the data.
+     - For text or csv files: list of integers with column position.
+     - For hdf5 files: list of data names.
+    mincuts : strings
+     Minimum value of the parameter of cutcols in the same index. All the galaxies below won't be considered.
+    maxcuts : strings
+     Maximum value of the parameter of cutcols in the same index. All the galaxies above won't be considered.
+    verbose : boolean
+      If True print out messages
+    testing : boolean
+      If True only run over few entries for testing purposes
+
+    Returns
+    -------
+    selection : array of integers
+    '''
+
+    selection = None
+    
+    check_file(infile, verbose=verbose)
+
+    if testing:
+        #limit = const.testlimit
+        limit = 50
+    else:
+        limit = None    
+
+    if inputformat not in const.inputformats:
+        if verbose:
+            print('STOP (gne_io): Unrecognised input format.',
+                  'Possible input formats = {}'.format(const.inputformats))
+        sys.exit()
+    elif inputformat=='hdf5':
+        with h5py.File(infile, 'r') as hf:
+            ind = np.arange(len(hf[cutcols[0]][:]))
+            for i in range(len(cutcols)):
+                if cutcols[i]:
+                    param = hf[cutcols[i]][:]
+                    mincut = mincuts[i]
+                    maxcut = maxcuts[i]
+
+                    if mincut and maxcut:
+                        ind = np.intersect1d(ind,np.where((mincut<param)&(param<maxcut))[0])
+                    elif mincut:
+                        ind = np.intersect1d(ind,np.where(mincut<param)[0])
+                    elif maxcut:
+                        ind = np.intersect1d(ind,np.where(param<maxcut)[0])
+            selection = ind[:limit]
+    elif inputformat=='txt':
+        ih = get_nheader(infile)
+        ind = np.arange(len(np.loadtxt(infile,usecols=cutcols[0],skiprows=ih)))
+        for i in range(len(cutcols)):
+            if cutcols[i]:
+                param = np.loadtxt(infile,usecols=cutcols[i],skiprows=ih)
+                mincut = mincuts[i]
+                maxcut = maxcuts[i]
+
+                if mincut and maxcut:
+                    ind = np.intersect1d(ind,np.where((mincut<param)&(param<maxcut))[0])
+                elif mincut:
+                    ind = np.intersect1d(ind,np.where(mincut<param)[0])
+                elif maxcut:
+                    ind = np.intersect1d(ind,np.where(param<maxcut)[0])
+        selection = ind[:limit]
+    else:
+        if verbose:
+            print('STOP (gne_io.get_selection): ',
+                  'Input file has not been found.')
+        sys.exit()
+
+    return selection
+
+def read_data(infile, cut, inputformat='hdf5', params=[None],
+              testing=False, verbose=True):    
+    '''
+    Read input data per column/dataset
+    
+    Parameters
+    ----------
+    infile : string
+       Name of the input file. 
+    cut : array of integers
+       List of indexes of the selected galaxies from the samples.
+    inputformat : string
+       Format of the input file.
+    params : list of either integers or strings
+       Inputs columns for text files or dataset name for hdf5 files.
+    testing : boolean
+       If True only run over few entries for testing purposes
+    verbose : boolean
+       If True print out messages.
+     
+    Returns
+    -------
+    outparams : array of floats
+    '''
+
+    check_file(infile, verbose=verbose)
+
+    if inputformat not in const.inputformats:
+        if verbose:
+            print('STOP (gne_io): Unrecognised input format.',
+                  'Possible input formats = {}'.format(const.inputformats))
+        sys.exit()
+    elif inputformat=='hdf5':
+        with h5py.File(infile, 'r') as hf:
+            ii = 0
+            for nomparam in params:
+                if (nomparam is not None):
+                    try:
+                        ###here what if Pos/vel as matrix?
+                        prop = hf[nomparam][cut]
+                    except:
+                        print('\n WARNING (gne_io): no {} found in {}'.format(
+                            nomparam,infile))
+
+                    if (ii == 0):
+                        outparams = prop
+                    else:
+                        outparams = np.vstack((outparams,prop))
+                    ii += 1
+
+    elif inputformat=='txt': ###need to adapt to the generalisation and test
+        ih = get_nheader(infile)
+        outparams = np.loadtxt(infile,skiprows=ih,usecols=params)[cut].T
+
+    return outparams
 
 if __name__== "__main__":
    
