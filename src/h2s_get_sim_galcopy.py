@@ -1,8 +1,10 @@
 import numpy as np
 import h5py
-import h2s_unit as hu
-import h2s_io as io
-import h2s_const as const
+import sys
+sys.path.append('/home2/guillermo/HODfit2sim')
+import src.h2s_unit as hu
+import src.h2s_io as io
+import src.h2s_const as const
 import sys
 
 def get_params_gal(halo_file, snap, sim, env, flux_cut, M_min, M_max, N_bin, output_file, testing = False, verbose = True):
@@ -117,7 +119,6 @@ def get_params_gal(halo_file, snap, sim, env, flux_cut, M_min, M_max, N_bin, out
     data0F = gal_data[0]  # HostHaloID
     data1F = gal_data[1]  # MainHaloID
     data2F = np.log10(gal_data[2])  # log10(MainMhalo)
-
 
     # ------------------------------------------------------------------------
     # 4) CLASSIFICATION: CENTRALS / SATELLITES
@@ -286,6 +287,6 @@ def get_params_gal(halo_file, snap, sim, env, flux_cut, M_min, M_max, N_bin, out
 #/home2/guillermo/out_90p_UNIT1_fnl100_1Gpc_x_y_z_vx_vy_vz_M_.txt   Condiciones iniciales distintas
 #/home2/guillermo/Halos_tree_DOC_PID_Vmax_all_Mass_fixedAmp_002.txt   Condiciones iniciales normales
 
-aa = get_params_gal("/Users/Usuario/Documents/Master_Fisica_Teorica/TFM/unit_fixedAmp_002.10000000.txt",[31], 'UNIT', 'laptop', 1.041e-16, 10.5, 16.5, 60, 'resultados.h5', testing = False, verbose = True)
-
+#aa = get_params_gal("/Users/Usuario/Documents/Master_Fisica_Teorica/TFM/unit_fixedAmp_002.10000000.txt",[31], 'UNIT', 'taurus', 1.041e-16, 10.5, 16.5, 60, 'resultados.h5', testing = False, verbose = True)
+aa = get_params_gal("/home2/guillermo/data_grp/Halos_tree_DOC_PID_Vmax_all_Mass_fixedAmp_002.txt",[31], 'UNIT', 'taurus2', 1.041e-16, 10.5, 16.5, 60, 'resultadosred.h5', testing = False, verbose = True)
 

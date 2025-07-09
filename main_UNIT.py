@@ -1,124 +1,618 @@
-# What part of the code will be run?
-#code2run = 'get_haloes' # Produce file with haloes, including number per mass bin
-code2run = 'get_params'  # Make a cut in one property to generate (shuffled) samples
-#code2run = 'get_params'
-#code2run = 'run_HOD'
+"""
+===============================================================================
+                         MASTER'S THESIS PROJECT                                
+    HALO OCCUPATION DISTRIBUTION: GALAXY-HALO CONNECTION ANALYSIS PIPELINE                        
+===============================================================================
 
-# Name of the simulation and work environment
-simtype = 'UNIT'; env = 'laptop'
+Author:         Joaquín Delgado Amar
+Supervisor:     Violeta González Pérez
+Institution:    Universidad Autónoma de Madrid (UAM)
+Date Created:   07 July 2025
+Last Updated:   07 July 2025
 
-# Simulations and redshifts
-#sims = ['HIRES/AGN_RECAL_nu0_L100N512_WMAP9']; snaps = [31]
-snaps = [31]
-sims = ['UNIT']
+-------------------------------------------------------------------------------
+DESCRIPTION
+-------------------------------------------------------------------------------
 
-# Path for output
-#dirout = '/users/arivgonz/output/Junk/'
-dirout = '/Users/Usuario/HODFIT2SIM/Junk/' # Cambiar por directorio junk
+This script provides a modular and highly configurable pipeline designed to 
+perform comprehensive analyses of galaxy and halo catalogs within cosmological 
+simulations. It is primarily aimed at studying the halo-galaxy connection, 
+particularly focusing on the clustering properties and internal kinematics of 
+Emission Line Galaxies (ELGs).
 
-# Consider haloes with more than npmin particles
-npmin = 20
+The analysis pipeline includes:
+    - Galaxy flux selection (flux cuts).
+    - Two-point correlation functions (2PCF) in real and redshift space.
+    - Galactic conformity parameters.
+    - Radial distribution of galaxies within halos.
+    - Velocity profiles (radial and tangential velocities).
+    - Kaiser analysis (to study redshift-space distortions).
+    - Galaxy catalog shuffling (randomization for statistical tests).
 
-# Define the halo mass bin size for <HODs>, shuffling and biasf
-dm0 = 0.057  #dex log10(Msun/h)
+-------------------------------------------------------------------------------
+CONFIGURABILITY
+-------------------------------------------------------------------------------
 
-# Halo mass to be considered
-mhnom = 'FOF/Group_M_Crit200'
+Each analysis step can be independently activated or deactivated using clearly 
+defined boolean flags at the top of the script. This ensures full flexibility, 
+easy debugging, and the possibility of running only subsets of the analysis 
+when needed.
 
-# Target number densities in log10(n/vol) and the properties to be used
-# String with values separated by a space
-ndtarget = '-2.5 -3.5'
-propname = 'Subhalo/Mass_030kpc'
-proptype = 'star'
+Main Control Flags:
+    - TESTING: Fast, limited data mode for quick testing.
+    - VERBOSE: Enable detailed step-by-step output for debugging purposes.
+    - DO_PLOTS: Generate and save diagnostic and scientific plots.
 
-# Are test plots to be produced? 
-tet_plots = True
+-------------------------------------------------------------------------------
+FILE STRUCTURE AND INPUT DATA
+-------------------------------------------------------------------------------
 
-verbose = True
-Testing = True
+The pipeline operates on two primary input datasets:
+    1. Galaxy catalogs (in HDF5 or text format), containing positions, velocities, 
+       halo associations, and flux information.
+    2. Halo catalogs (in HDF5 or text format), containing halo IDs, masses, positions, 
+       velocities, and other relevant physical properties.
 
-# Use slurm queues?
-use_slurm = False  # Mandar colas en Taurus
-partition = 'test'   # test or compute
-time = '09:30:00'    #Format: d-hh:mm:ss
-nodes = 1
-ntasks = 1
-cputask = 1
+Output data, plots, and intermediate results are systematically stored in dedicated 
+directories ('results/' and 'data/'), ensuring clear organization.
 
-#--------------End of input parameters-------------------
+-------------------------------------------------------------------------------
+MODULES AND DEPENDENCIES
+-------------------------------------------------------------------------------
+
+This pipeline leverages several specialized Python modules stored within the 'src/' 
+directory of the project. Dependencies include:
+    - numpy
+    - matplotlib
+    - h5py
+    - scipy
+    - Corrfunc (for efficient correlation function calculations)
+
+All modules are documented individually with clear and comprehensive docstrings.
+
+-------------------------------------------------------------------------------
+USAGE
+-------------------------------------------------------------------------------
+
+Adjust the parameters and flags at the top of this script according to your 
+analysis needs, and run the script from the project's root directory:
+
+>>> python main.py
+
+-------------------------------------------------------------------------------
+CONTACT
+-------------------------------------------------------------------------------
+
+mail: joaquin.delgado@estudiante.uam.es
+
+===============================================================================
+"""
+
 import os
-#from src.h2s_io import get_file_name
+import h5py
+import numpy as np
 
-# Executable full path
-path2program = os.getcwd()+'/src/'
+# ===================================================================
+# ============== 1. PARAMETER DEFINITION SECTION ====================
+# ===================================================================
 
-counter = 0
-for sim in sims:
-    for snap in snaps:
-        match code2run:
-            case 'get_haloes':
-                program = path2program+'h2s_gethaloes.py'
-                args = simtype+' '+sim+' '+env+' '+str(snap)+' '+mhnom+' '+str(npmin)+' '+str(dm0)
-                args = args+' '+dirout+' '+str(verbose)+' '+str(Testing)
-                
-            case 'get_sample':
-                program = path2program+'h2s_getsample.py'
+# Control parameters
+TESTING = False              # If True, runs in testing mode (faster, less data)
+VERBOSE = True               # If True, prints detailed information during execution
+DO_PLOTS = True              # If True, generates plots for the results
 
-                filenom = get_file_name(simtype,sim,snap,mhnom,dirout,filetype='sample')
-                args = ' --listsim '+filenom+' --listnd '+ndtarget
-                args = args+' --listprop '+propname+' --listproptype '+proptype
-                args = args+' --listbool '+str(verbose)+' '+str(Testing)
-                
-            case 'get_sim_params':
-                program = path2program+'prueba.py'
-                args = simtype+' '+sim+' '+env+' '
-                
-            case 'run_HOD':
-                program = path2program+'h2s_runHOD.py'
-                args = simtype+' '+sim+' '+env+' '
-                
-            case other:
-                print(f'Code to run not recognised: {code2run} ({sim}, z={zz})')
+# Cosmological parameters
+OMEGA_M = 0.3089             # Matter density parameter
+OMEGA_L = 0.6911             # Dark energy density parameter
+h = 0.6774                   # Hubble constant (H0 = 100 * h km/s/Mpc)
+Z_SNAP = 1.321               # Snapshot redshift
 
-        # Submit the jobs
-        if not use_slurm:
-            os.system(f'python {program} {args}')
+# Simulation parameters
+BOXSIZE = 1000.0             # Box size in Mpc/h
+FLUX_MIN = 1.32502e-16       # Minimum Halpha flux for ELGs [erg/s/cm^2]
+DO_FLUX_CUT = True           # If True, applies a flux cut to the galaxy sample
+
+# Input and output file paths
+BASE_DIR = "/home2/guillermo/TFM_JOAQUIN"        # Base directory for the project
+RESULTS_DIR = os.path.join(BASE_DIR, "tests")    # Directory for results  
+DATA_DIR = os.path.join(BASE_DIR, "data")        # Directory for input data files
+os.makedirs(RESULTS_DIR, exist_ok=True)          # Create results directory if it doesn't exist
+os.makedirs(DATA_DIR, exist_ok=True)             # Create data directory if it doesn't exist
+
+# Input files
+GALAXY_FILE = os.path.join(DATA_DIR, "UNITSIM1_model_z1.321_ELGs.h5")        # Input galaxy file
+HALO_FILE = os.path.join(DATA_DIR, "Halos_tree_DOC_PID_Vmax_all_Mass.txt")   # Input halo file
+
+# Input file formats
+INPUT_GALAXY_FORMAT = "h5"                       # Input Halaxy file format ('h5', 'txt')
+INPUT_HALO_FORMAT = "txt"                        # Input Halo file format ('h5', 'txt')     
+
+# Galaxy file keys
+if INPUT_GALAXY_FORMAT == "h5":
+    GALAXY_MAIN_ID_KEY = "MainHaloID"            # Key for main halo ID 
+    GALAXY_HOST_ID_KEY = "HostHaloID"            # Key for host halo ID 
+    GALAXY_MAIN_MASS_KEY = "MainMhalo"           # Key for main halo mass
+    GALAXY_XPOS_KEY = "Xpos"                     # Key for x position 
+    GALAXY_YPOS_KEY = "Ypos"                     # Key for y position 
+    GALAXY_ZPOS_KEY = "Zpos"                     # Key for z position 
+    GALAXY_XVEL_KEY = "Xvel"                     # Key for x velocity 
+    GALAXY_YVEL_KEY = "Yvel"                     # Key for y velocity
+    GALAXY_ZVEL_KEY = "Zvel"                     # Key for z velocity 
+    GALAXY_LOG_HALPHA_KEY = "logFHalpha_att"     # Key for Halpha flux 
+
+if INPUT_GALAXY_FORMAT == "txt":
+    GALAXY_MAIN_ID_KEY = 1                       # Key for main halo ID
+    GALAXY_HOST_ID_KEY = 2                       # Key for host halo ID 
+    GALAXY_MAIN_MASS_KEY = 3                     # Key for main halo mass 
+    GALAXY_XPOS_KEY = 4                          # Key for x position 
+    GALAXY_YPOS_KEY = 5                          # Key for y position
+    GALAXY_ZPOS_KEY = 6                          # Key for z position 
+    GALAXY_XVEL_KEY = 7                          # Key for x velocity 
+    GALAXY_YVEL_KEY = 8                          # Key for y velocity 
+    GALAXY_ZVEL_KEY = 9                          # Key for z velocity 
+    GALAXY_LOG_HALPHA_KEY = 10                   # Key for Halpha flux 
+
+# Halo file keys
+if INPUT_HALO_FORMAT == "h5":
+    HALO_XPOS_KEY = "Xpox"      # Key for x position
+    HALO_YPOS_KEY = "Ypos"      # Key for y position
+    HALO_ZPOS_KEY = "Zpos"      # Key for z position 
+    HALO_MASS_KEY = "Mass"      # Key for halo mass
+    HALO_XVEL_KEY = "Xvel"      # Key for x velocity
+    HALO_YVEL_KEY = "Yvel"      # Key for y velocity
+    HALO_ZVEL_KEY = "Zvel"      # Key for z velocity
+    HALO_ID_KEY = "ID"          # Key for halo ID
+    HALO_PID_KEY = "PID"        # Key for halo PID
+
+if INPUT_HALO_FORMAT == "txt":
+    HALO_XPOS_KEY = 3           # Key for x position
+    HALO_YPOS_KEY = 4           # Key for y position 
+    HALO_ZPOS_KEY = 5           # Key for z position
+    HALO_MASS_KEY = 17          # Key for halo mass
+    HALO_XVEL_KEY = 6           # Key for x velocity
+    HALO_YVEL_KEY = 7           # Key for y velocity 
+    HALO_ZVEL_KEY = 8           # Key for z velocity
+    HALO_ID_KEY = 1             # Key for halo ID
+    HALO_PID_KEY = 13           # Key for halo PID
+
+# ===================================================================
+# ========= 2. Two Point Correlation Function. Real Space ===========
+# ===================================================================
+
+DO_CORRELATION_FUNC_REAL_SPACE = True  # If True, computes the 2PCF in real space
+NBINS_2PCF_REAL = 80                    # Number of bins
+RMAX_2PCF_REAL = 140.0                  # Maximum distance in Mpc/h
+RMIN_2PCF_REAL = 1.4e-3                 # Minimum distance in Mpc/h
+NTHREADS_2PCF_REAL = 4                  # Number of threads for correlation function computation
+DO_2PCF_REAL_RATIO = True               # If True, computes the ratio of 2PCF between original and shuffled catalogs
+XLIM_2PCF_RATIO = (0.01, 100.0)         # X-axis limits for 2PCF ratio plot (None for automatic)
+YLIM_2PCF_RATIO = (0.5, 1.4)            # Y-axis limits for 2PCF ratio plot (None for automatic)
+
+# ====================================================================
+# ======== 3. Two Point Correlation Function. Redshift Space =========
+# ====================================================================
+
+DO_CORRELATION_FUNC_REDSHIFT_SPACE = True  # If True, computes the 2PCF in redshift space
+NBINS_2PCF_REDSHIFT = 80                   # Number of bins
+RMAX_2PCF_REDSHIFT = 140.0                 # Maximum distance in Mpc/h
+RMIN_2PCF_REDSHIFT = 1.4e-3                # Minimum distance in Mpc/h
+NTHREADS_2PCF_REDSHIFT = 4                 # Number of threads for correlation function computation
+LOS_AXIS = 'z'                             # Line of sight axis for redshift space (default is 'z')
+
+# ====================================================================
+# ================= 4. Conformity Parameters =========================
+# ====================================================================
+
+DO_CONFORMITY = True                      # If True, computes conformity parameters
+M_MIN_CONFORMITY = 10.5                   # Minimum halo mass for conformity analysis (logarithmic scale)
+M_MAX_CONFORMITY = 14.5                   # Maximum halo mass for conformity analysis (logarithmic scale)
+N_BINS_CONFORMITY = 70                    # Number of bins for halo mass in conformity analysis
+BIN_WIDTH_CONFORMITY = 0.057              # Width of each bin in logarithmic scale
+DO_HMF_COMPARISON = True                 # If True, compares halo mass functions (HMF) between original and shuffled catalogs
+BINNING_HMF= np.linspace(10.5, 14.5, 71)  # Mass binning for HMF comparison in logarithmic scale
+
+# ====================================================================
+# ===================== 5. Radial Profile ============================
+# ====================================================================
+
+DO_RADIAL_PROFILE = True                   # If True, computes the radial profile
+BINNING_RADIAL = np.linspace(0, 1.5, 151)  # Binning for radial profile in Mpc/h
+DO_FIT_RADIAL_PROFILE = True               # If True, fits the radial profile  
+INITAL_GUESS_RADIAL = None                 # Initial guess for fitting parameters (if needed)
+
+# ====================================================================
+# ================= 8. Radial Velocity Profile =======================
+# ====================================================================
+
+DO_VR_PROFILE = True                         # If True, computes the radial velocity profile
+BINNING_VR = np.linspace(-1000, 1000, 201)   # Binning for radial velocity profile in km/s
+DO_FIT_VR_PROFILE = True                     # If True, fits the radial velocity profile
+MANUAL_PARAMS_VR = None                      # Manual parameters for fitting (if needed)
+
+# ====================================================================
+# ================= 9. Tangential Velocity Profile ===================
+# ===================================================================
+
+DO_VTAN_PROFILE = True                    # If True, computes the tangential velocity profile
+BINNING_VTAN = np.linspace(0, 1000, 201)  # Binning for tangential velocity profile in km/s
+DO_FIT_VTAN_PROFILE = True                # If True, fits the tangential velocity profile
+MANUAL_PARAMS_VTAN = None                 # Manual parameters for fitting (if needed)
+
+# ====================================================================
+# ================= 10. Kaiser Analysis ==============================
+# ====================================================================
+
+DO_KAISER_ANALYSIS = True            # If True, performs Kaiser analysis
+BIAS = 1.86                          # Bias parameter for ELGs
+GAMMA = 0.55                         # Gamma parameter for Kaiser analysis
+DO_KAISER_RATIO = True               # If True, computes Kaiser ratio between redshift and real space
+XLIM_KAISER = (0.1,100)              # X-axis limits for Kaiser ratio plot (None for automatic)
+YLIM_KAISER = (0.75,1.5)             # Y-axis limits for Kaiser ratio plot (None for automatic)
+
+# ====================================================================
+# ===================== 11. Shuffling ================================
+# ====================================================================
+
+DO_SHUFFLING = True               # If True, shuffles the galaxy catalogue
+N_BINS_SHUFFLING = 70              # Number of bins for halo mass in shuffling
+M_MIN_SHUFFLING = 10.5             # Minimum halo mass for shuffling (logarithmic scale)
+M_MAX_SHUFFLING = 14.5             # Maximum halo mass for shuffling (logarithmic scale)
+
+
+
+def main():
+
+    # ================== Apply flux cut =================
+    if DO_FLUX_CUT:
+        print("Applying flux cut...")
+        from src.h2s_io import filter_log_flux
+        FILTERED_GALAXIES = os.path.join(DATA_DIR, f"filtered_ELGs_{FLUX_MIN}.{INPUT_GALAXY_FORMAT}")
+        filter_log_flux(infile=GALAXY_FILE, fmin=FLUX_MIN, outfile_name=FILTERED_GALAXIES, 
+                        output_format=INPUT_GALAXY_FORMAT, param_name=GALAXY_LOG_HALPHA_KEY, testing=TESTING,
+                        verbose=VERBOSE)
+    
+    # ================= Galaxy Shuffling ================
+
+    if DO_SHUFFLING:
+        print("Splitting Halo Catalogue by mass...")
+        from src.h2s_io import split_halo_catalog_by_mass
+        HALO_MASS_BINS = os.path.join(DATA_DIR, "halo_mass_bins.h5")
+        split_halo_catalog_by_mass(halo_file=HALO_FILE, mass_column=HALO_MASS_KEY, logmass = False,
+                                      output_h5=HALO_MASS_BINS, min_logmass=M_MIN_SHUFFLING, max_logmass=M_MAX_SHUFFLING,
+                                      n_bins=N_BINS_SHUFFLING, columns={"id": HALO_ID_KEY, "X": HALO_XPOS_KEY,
+                                      "Y": HALO_YPOS_KEY, "Z": HALO_ZPOS_KEY,"vx": HALO_XVEL_KEY, "vy": HALO_YVEL_KEY,
+                                      "vz": HALO_ZVEL_KEY, "pid": HALO_PID_KEY,"Mass": HALO_MASS_KEY}, verbose=VERBOSE)
+        
+        print("Shuffling halo catalogue...")
+        from src.h2s_shuffle import shuffle_parent_halos
+        SHUFFLED_HALO_FILE = os.path.join(DATA_DIR, "halo_mass_bins_shuffled.h5")
+        shuffle_parent_halos(input_hdf5=HALO_MASS_BINS, output_hdf5 = SHUFFLED_HALO_FILE, verbose=VERBOSE,
+                              rng_seed=None)
+        
+        print("Shuffling galaxy catalogue...")
+        from src.h2s_shuffle import shuffle_galaxy_catalog_binned
+        from src.h2s_profile_r import boundary_correction
+        if DO_FLUX_CUT:
+            SHUFFLED_GALAXY_FILE = os.path.join(DATA_DIR, f"filtered_ELGs_{FLUX_MIN}_shuffled.h5")
         else:
-            import time as tt
+            SHUFFLED_GALAXY_FILE = os.path.join(DATA_DIR, "filtered_ELGs_shuffled.h5")
+        shuffle_galaxy_catalog_binned(galaxy_file=FILTERED_GALAXIES, halo_shuffled_file=SHUFFLED_HALO_FILE, output_file=SHUFFLED_GALAXY_FILE,
+                                      boxsize=BOXSIZE, bins=N_BINS_SHUFFLING, boundary_correction=boundary_correction,
+                                      verbose=VERBOSE)
 
-            log_dir = dirout+'logs/'
-            if not os.path.exists(log_dir): os.mkdir(log_dir)
+    # =========== Calculate 2PCF. Real Space ============
 
-            # Name of the submission script
-            now = tt.localtime()
-            script = f"{log_dir}{code2run}_{now.tm_hour:02d}{now.tm_min:02d}_{counter}.sh"
-            counter += 1
-            # For checking if the module is loaded
-            script_content1 = 'module_to_check="apps/anaconda3/2023.03/bin"'
-            script_content2 = 'if [[ $module_list_output != *"$module_to_check"* ]]; then'
+    if DO_CORRELATION_FUNC_REAL_SPACE:
+        print("Calculating correlation function in real space...")
+        from src.h2s_corr import compute_correlation_corrfunc, export_positions
 
-            # Write sumbission script
-            with open(script,'w') as fh:
-                fh.write("#!/bin/bash \n")
-                fh.write("\n")
-                fh.write("#SBATCH --job-name=job.{}.%J \n".format(code2run))
-                fh.write("#SBATCH --output={}out.{}.%J \n".format(log_dir,code2run))
-                fh.write("#SBATCH --error={}err.{}.%J \n".format(log_dir,code2run))
-                fh.write("#SBATCH --time={} \n".format(time))
-                fh.write("#SBATCH --nodes={} \n".format(str(nodes)))
-                fh.write("#SBATCH --ntasks={} \n".format(str(ntasks)))
-                fh.write("#SBATCH --cpus-per-task={} \n".format(str(cputask)))
-                fh.write("#SBATCH --partition={} \n".format(partition))
-                fh.write("\n")
-                fh.write("flight env activate gridware \n")
-                fh.write("\n")
-                fh.write("{} \n".format(script_content1))
-                fh.write("module_list_output=$(module list 2>&1) \n")
-                fh.write("{} \n".format(script_content2))
-                fh.write("  module load $module_to_check \n")
-                fh.write("fi \n")
-                fh.write("\n")
-                fh.write("python3 {} {}\n".format(program, args))
+        if DO_FLUX_CUT:
+            POSITIONS_GALAXIES = os.path.join(DATA_DIR, f"positions_{FLUX_MIN}.txt")
+            GALAXY_2PCF_REAL = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_{FLUX_MIN}.txt")
+            POSITIONS_GALAXIES_SHUFFLED = os.path.join(DATA_DIR, f"positions_shuffled_{FLUX_MIN}.txt")
+            GALAXY_2PCF_REAL_SHUFFLED = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_shuffled_{FLUX_MIN}.txt")
+        else:
+            POSITIONS_GALAXIES = os.path.join(DATA_DIR, "positions.txt")
+            GALAXY_2PCF_REAL = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_.txt")
+            POSITIONS_GALAXIES_SHUFFLED = os.path.join(DATA_DIR, "positions_shuffled.txt")
+            GALAXY_2PCF_REAL_SHUFFLED = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_shuffled.txt")
 
-            print("Run {}".format(script))
-            #os.system("sbatch {}".format(script))
+        if DO_SHUFFLING:
+            export_positions(SHUFFLED_GALAXY_FILE, POSITIONS_GALAXIES_SHUFFLED,
+                            xkey=GALAXY_XPOS_KEY, ykey=GALAXY_YPOS_KEY, zkey=GALAXY_ZPOS_KEY, verbose=VERBOSE)
+            
+            compute_correlation_corrfunc(POSITIONS_GALAXIES_SHUFFLED, GALAXY_2PCF_REAL_SHUFFLED, boxsize=BOXSIZE,
+                                         n_bins= NBINS_2PCF_REAL, rmax = RMAX_2PCF_REAL, rmin=RMIN_2PCF_REAL, n_threads=NTHREADS_2PCF_REAL,
+                                         verbose=VERBOSE)
+        
+        export_positions(FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE, POSITIONS_GALAXIES,
+                            xkey=GALAXY_XPOS_KEY, ykey=GALAXY_YPOS_KEY, zkey=GALAXY_ZPOS_KEY, verbose=VERBOSE)
+            
+        compute_correlation_corrfunc(POSITIONS_GALAXIES, GALAXY_2PCF_REAL, boxsize=BOXSIZE, n_bins= NBINS_2PCF_REAL,
+                                     rmax = RMAX_2PCF_REAL, rmin=RMIN_2PCF_REAL, n_threads=NTHREADS_2PCF_REAL,
+                                     verbose=VERBOSE)
+        
+        if DO_PLOTS:
+            from src.h2s_plots import plot_correlation_function, plot_2pcf_ratio
+            if DO_FLUX_CUT:
+                PLOT_2PCF_REAL = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_{FLUX_MIN}.png")
+                PLOT_2PCF_REAL_SHUFFLED = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_shuffled_{FLUX_MIN}.png")
+            else:
+                PLOT_2PCF_REAL = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_.png")
+                PLOT_2PCF_REAL_SHUFFLED = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_shuffled.png")
+            plot_correlation_function(GALAXY_2PCF_REAL, PLOT_2PCF_REAL, loglog=True, show=True,
+                                      r_index=0, xi_index=1, err_index=2)
+            if DO_SHUFFLING:
+                plot_correlation_function(GALAXY_2PCF_REAL_SHUFFLED, PLOT_2PCF_REAL_SHUFFLED, loglog=True, show=True,
+                                          r_index=0, xi_index=1, err_index=2)
+                if DO_2PCF_REAL_RATIO:
+                    if DO_FLUX_CUT:
+                        PLOT_2PCF_RATIO = os.path.join(RESULTS_DIR, f"2PCF_ratio_{FLUX_MIN}.png")
+                    else:
+                        PLOT_2PCF_RATIO = os.path.join(RESULTS_DIR, "2PCF_ratio.png")
+                    plot_2pcf_ratio(file_normal=GALAXY_2PCF_REAL, file_shuffled=GALAXY_2PCF_REAL_SHUFFLED,
+                                    output_png=PLOT_2PCF_RATIO, xlim=XLIM_2PCF_RATIO, ylim=YLIM_2PCF_RATIO, show=True)
+                
+            
+    # ========= Calculate 2PCF. Redshift Space =========
+
+    if DO_CORRELATION_FUNC_REDSHIFT_SPACE:
+        print("Calculating correlation function in redshift space...")
+        from src.h2s_corr import export_positions_redshift_space, compute_correlation_corrfunc
+
+        if DO_FLUX_CUT:
+            POSITIONS_GALAXIES_RS = os.path.join(DATA_DIR, f"positions_redshift_{FLUX_MIN}.txt")
+            GALAXY_2PCF_REDSHIFT = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_redshift_{FLUX_MIN}.txt")
+            POSITIONS_GALAXIES_RS_SHUFFLED = os.path.join(DATA_DIR, f"positions_redshift_shuffled_{FLUX_MIN}.txt")
+            GALAXY_2PCF_REDSHIFT_SHUFFLED = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_redshift_shuffled_{FLUX_MIN}.txt")
+        else:
+            POSITIONS_GALAXIES_RS = os.path.join(DATA_DIR, "positions_redshift.txt")
+            GALAXY_2PCF_REDSHIFT = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_redshift.txt")
+            POSITIONS_GALAXIES_RS_SHUFFLED = os.path.join(DATA_DIR, "positions_redshift_shuffled.txt") 
+            GALAXY_2PCF_REDSHIFT_SHUFFLED = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_redshift_shuffled.txt")
+
+        if DO_SHUFFLING:
+            export_positions_redshift_space(infile=SHUFFLED_GALAXY_FILE,
+                                           outfile= POSITIONS_GALAXIES_RS_SHUFFLED, z_snap=Z_SNAP, Omega_L=OMEGA_L,
+                                           Omega_m=OMEGA_M, h=h, xkey=GALAXY_XPOS_KEY, ykey=GALAXY_YPOS_KEY, 
+                                           zkey=GALAXY_ZPOS_KEY, xvel_key=GALAXY_XVEL_KEY,yvel_key=GALAXY_YVEL_KEY,
+                                           zvel_key=GALAXY_ZVEL_KEY, los_axis=LOS_AXIS, verbose=VERBOSE)
+            
+            compute_correlation_corrfunc(POSITIONS_GALAXIES_RS_SHUFFLED, GALAXY_2PCF_REDSHIFT_SHUFFLED, boxsize=BOXSIZE, 
+                                     n_bins= NBINS_2PCF_REDSHIFT,rmax = RMAX_2PCF_REDSHIFT, rmin=RMIN_2PCF_REDSHIFT,
+                                     n_threads=NTHREADS_2PCF_REDSHIFT, verbose=VERBOSE)
+        
+            
+        export_positions_redshift_space(infile=FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE,
+                                           outfile= POSITIONS_GALAXIES_RS, z_snap=Z_SNAP, Omega_L=OMEGA_L,
+                                          Omega_m=OMEGA_M, h=h, xkey=GALAXY_XPOS_KEY, ykey=GALAXY_YPOS_KEY, 
+                                          zkey=GALAXY_ZPOS_KEY, xvel_key=GALAXY_XVEL_KEY,yvel_key=GALAXY_YVEL_KEY,
+                                          zvel_key=GALAXY_ZVEL_KEY, los_axis=LOS_AXIS, verbose=VERBOSE)
+
+        compute_correlation_corrfunc(POSITIONS_GALAXIES_RS, GALAXY_2PCF_REDSHIFT, boxsize=BOXSIZE, 
+                                     n_bins= NBINS_2PCF_REDSHIFT,rmax = RMAX_2PCF_REDSHIFT, rmin=RMIN_2PCF_REDSHIFT,
+                                     n_threads=NTHREADS_2PCF_REDSHIFT, verbose=VERBOSE)
+        
+        if DO_PLOTS:
+            from src.h2s_plots import plot_correlation_function
+            if DO_FLUX_CUT:
+                PLOT_2PCF_REDSHIFT = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_redshift_{FLUX_MIN}.png")
+                PLOT_2PCF_REDSHIFT_SHUFFLED = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_redshift_shuffled_{FLUX_MIN}.png")
+            else:
+                PLOT_2PCF_REDSHIFT = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_redshift.png")
+                PLOT_2PCF_REDSHIFT_SHUFFLED = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_redshift_shuffled.png")
+            plot_correlation_function(GALAXY_2PCF_REDSHIFT, PLOT_2PCF_REDSHIFT, loglog=True, show=True,
+                                      r_index=0, xi_index=1, err_index=2)       
+            if DO_SHUFFLING:
+                plot_correlation_function(GALAXY_2PCF_REDSHIFT_SHUFFLED, PLOT_2PCF_REDSHIFT_SHUFFLED, loglog=True, show=True,
+                                          r_index=0, xi_index=1, err_index=2)
+
+    # ========= Calculate Conformity Parameters =========
+    # If DO_PLOTS, plots the Halo Mass Function (HMF) and Halo Occupation Distribution (HOD).
+
+    if DO_CONFORMITY:
+        print("Calculating conformity parameters...")
+        from src.h2s_conformity import compute_conformity_parameters
+
+        if DO_FLUX_CUT:
+            CONFORMITY = os.path.join(RESULTS_DIR, f"conformity_{FLUX_MIN}.h5")
+        else:
+            CONFORMITY = os.path.join(RESULTS_DIR, "conformity.h5")
+        
+        compute_conformity_parameters(galaxy_file=FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE,
+                                      halo_file= HALO_FILE, M_min= M_MIN_CONFORMITY,
+                                      M_max= M_MAX_CONFORMITY, N_bins=N_BINS_CONFORMITY,
+                                      galaxy_format=INPUT_GALAXY_FORMAT, halo_format= INPUT_HALO_FORMAT,
+                                      output_file=CONFORMITY, halo_pid=HALO_PID_KEY, halo_mass=HALO_MASS_KEY,
+                                      verbose=VERBOSE, gal_host_id= GALAXY_HOST_ID_KEY,
+                                      gal_main_id= GALAXY_MAIN_ID_KEY, gal_main_mass= GALAXY_MAIN_MASS_KEY)
+            
+        if DO_PLOTS:
+            from src.h2s_plots import plot_hmf, plot_hod
+            if DO_FLUX_CUT:
+                PLOT_HMF = os.path.join(RESULTS_DIR, f"HMF_{FLUX_MIN}.png")
+                PLOT_HOD = os.path.join(RESULTS_DIR, f"HOD_Occupation_{FLUX_MIN}.png")
+            else:
+                PLOT_HMF = os.path.join(RESULTS_DIR, "HMF.png")
+                PLOT_HOD = os.path.join(RESULTS_DIR, "HOD_Occupation.png")
+
+            plot_hmf(h5file=CONFORMITY, output_path=PLOT_HMF, box_size=BOXSIZE,
+                     logM_min=M_MIN_CONFORMITY, logM_max=M_MAX_CONFORMITY, n_bins=N_BINS_CONFORMITY, show=True)
+            plot_hod(h5file=CONFORMITY, output_path=PLOT_HOD, show=True)
+
+            if DO_HMF_COMPARISON:
+                print("Comparing HMF between original and shuffled catalogs...")
+                from src.h2s_plots import plot_hmf_comparison
+                if DO_FLUX_CUT:
+                    PLOT_HMF_COMPARISON = os.path.join(RESULTS_DIR, f"HMF_comparison_{FLUX_MIN}.png")
+                else:
+                    PLOT_HMF_COMPARISON = os.path.join(RESULTS_DIR, "HMF_comparison.png")
+                plot_hmf_comparison(conformity_file=CONFORMITY, halo_bins_file=SHUFFLED_HALO_FILE, bins=BINNING_HMF,
+                                    output_png=PLOT_HMF_COMPARISON, boxsize=BOXSIZE, show=True, loglog=True)
+
+
+    #=============== Calculate Radial Profile ===============
+    
+    if DO_RADIAL_PROFILE:
+        print("Calculating radial profile...")
+        from src.h2s_profile_r import compute_radial_profile
+
+        if DO_FLUX_CUT:
+            RADIAL_PROFILE = os.path.join(RESULTS_DIR, f"radial_profile_{FLUX_MIN}.h5")
+        else:
+            RADIAL_PROFILE = os.path.join(RESULTS_DIR, "radial_profile.h5")
+        
+        compute_radial_profile(galaxy_file=FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE,
+                               halo_file=HALO_FILE, output_file=RADIAL_PROFILE, verbose=VERBOSE,
+                               boxsize=BOXSIZE, bins=BINNING_RADIAL, halo_format=INPUT_HALO_FORMAT,
+                               halo_id_key=HALO_ID_KEY, halo_pid_key=HALO_PID_KEY, halo_x_key=HALO_XPOS_KEY,
+                               halo_y_key=HALO_YPOS_KEY, halo_z_key=HALO_ZPOS_KEY,
+                               galaxy_host_key=GALAXY_HOST_ID_KEY, galaxy_id_key=GALAXY_MAIN_ID_KEY,
+                               galaxy_x_key=GALAXY_XPOS_KEY, galaxy_y_key=GALAXY_YPOS_KEY,
+                               galaxy_z_key=GALAXY_ZPOS_KEY)
+        
+        if DO_PLOTS:
+            from src.h2s_plots import plot_radial_profile
+            if DO_FLUX_CUT:
+                PLOT_RADIAL_PROFILE = os.path.join(RESULTS_DIR, f"radial_profile_{FLUX_MIN}.png")
+            else:
+                PLOT_RADIAL_PROFILE = os.path.join(RESULTS_DIR, "radial_profile.png")
+            plot_radial_profile(profile_file=RADIAL_PROFILE, output_png=PLOT_RADIAL_PROFILE,
+                                loglog=True, show=True)
+        
+        if DO_FIT_RADIAL_PROFILE:
+            print("Fitting radial profile...")
+            from src.h2s_profile_r import fit_radial_profile
+            if DO_FLUX_CUT:
+                FIT_RADIAL_PROFILE_PARAMS = os.path.join(RESULTS_DIR, f"radial_profile_fit_params{FLUX_MIN}.txt")
+            else:
+                FIT_RADIAL_PROFILE_PARAMS = os.path.join(RESULTS_DIR, "radial_profile_fit_params.txt")
+            fit_radial_profile(profile_file=RADIAL_PROFILE, output_params_file=FIT_RADIAL_PROFILE_PARAMS,
+                               initial_guess= INITAL_GUESS_RADIAL, bounds=None, verbose=VERBOSE)
+            if DO_PLOTS:
+                from src.h2s_plots import plot_radial_profile_fit
+                if DO_FLUX_CUT:
+                    FIT_RADIAL_PROFILE = os.path.join(RESULTS_DIR, f"radial_profile_fit_{FLUX_MIN}.png")
+                else:
+                    FIT_RADIAL_PROFILE = os.path.join(RESULTS_DIR, "radial_profile_fit.png")
+                
+                params = np.loadtxt(FIT_RADIAL_PROFILE_PARAMS, delimiter=",", skiprows=1).flatten()
+                plot_radial_profile_fit(profile_file=RADIAL_PROFILE, output_png=FIT_RADIAL_PROFILE,
+                                        params = params, show=True, loglog=True)
+
+    # ========== Calculate Radial Velocity Profile ===========
+
+    if DO_VR_PROFILE:
+        print("Calculating radial velocity profile...")
+        from src.h2s_profile_vel import compute_vr_profile
+
+        if DO_FLUX_CUT:
+            VR_PROFILE = os.path.join(RESULTS_DIR, f"vr_profile_{FLUX_MIN}.h5")
+        else:
+            VR_PROFILE = os.path.join(RESULTS_DIR, "vr_profile.h5")
+
+        compute_vr_profile(galaxy_file=FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE,
+                            halo_file=HALO_FILE, output_file=VR_PROFILE,verbose=VERBOSE, boxsize=BOXSIZE, 
+                            bins=BINNING_VR, halo_format=INPUT_HALO_FORMAT, halo_id_key=HALO_ID_KEY,
+                            halo_pid_key=HALO_PID_KEY, halo_x_key=HALO_XPOS_KEY, halo_y_key=HALO_YPOS_KEY,
+                            halo_z_key=HALO_ZPOS_KEY, halo_vx_key=HALO_XVEL_KEY, halo_vy_key=HALO_YVEL_KEY,
+                            halo_vz_key=HALO_ZVEL_KEY, galaxy_host_id_key=GALAXY_HOST_ID_KEY,
+                            galaxy_main_id_key=GALAXY_MAIN_ID_KEY, galaxy_x_key=GALAXY_XPOS_KEY,
+                            galaxy_y_key=GALAXY_YPOS_KEY, galaxy_z_key=GALAXY_ZPOS_KEY,
+                            galaxy_vx_key=GALAXY_XVEL_KEY, galaxy_vy_key=GALAXY_YVEL_KEY,
+                          galaxy_vz_key=GALAXY_ZVEL_KEY)
+            
+        if DO_PLOTS:
+            from src.h2s_plots import plot_vr_distribution
+            if DO_FLUX_CUT:
+                PLOT_VR_PROFILE = os.path.join(RESULTS_DIR, f"vr_profile_{FLUX_MIN}.png")
+            else:
+                PLOT_VR_PROFILE = os.path.join(RESULTS_DIR, "vr_profile.png")
+            plot_vr_distribution(vr_profile_file=VR_PROFILE, output_png=PLOT_VR_PROFILE, loglog=False, show=True)
+        
+        if DO_FIT_VR_PROFILE:
+            print("Fitting radial velocity profile...")
+            from src.h2s_profile_vel import fit_vr_profile
+            if DO_FLUX_CUT:
+                FIT_VR_PROFILE = os.path.join(RESULTS_DIR, f"vr_profile_fit_{FLUX_MIN}.png")
+            else:
+                FIT_VR_PROFILE = os.path.join(RESULTS_DIR, "vr_profile_fit.png")
+            fit_vr_profile(vr_profile_file=VR_PROFILE, plot=True, output_png=FIT_VR_PROFILE,
+                           loglog=False, manual_params=MANUAL_PARAMS_VR)
+
+    # ========== Calculate Tangential Velocity Profile ===========
+
+    if DO_VTAN_PROFILE:
+        print("Calculating tangential velocity profile...")
+        from src.h2s_profile_vel import compute_vtan_profile
+        if DO_FLUX_CUT:
+            VTAN_PROFILE = os.path.join(RESULTS_DIR, f"vtan_profile_{FLUX_MIN}.h5")
+        else:
+            VTAN_PROFILE = os.path.join(RESULTS_DIR, "vtan_profile.h5")
+        
+        compute_vtan_profile(galaxy_file=FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE,
+                             halo_file=HALO_FILE, output_file=VTAN_PROFILE, verbose=VERBOSE, boxsize=BOXSIZE,
+                             bins=BINNING_VTAN, halo_format=INPUT_HALO_FORMAT, halo_id_key=HALO_ID_KEY,
+                             halo_pid_key=HALO_PID_KEY, halo_x_key=HALO_XPOS_KEY, halo_y_key=HALO_YPOS_KEY,
+                             halo_z_key=HALO_ZPOS_KEY, halo_vx_key=HALO_XVEL_KEY, halo_vy_key=HALO_YVEL_KEY,
+                             halo_vz_key=HALO_ZVEL_KEY, galaxy_host_id_key=GALAXY_HOST_ID_KEY,
+                             galaxy_main_id_key=GALAXY_MAIN_ID_KEY, galaxy_x_key=GALAXY_XPOS_KEY,
+                             galaxy_y_key=GALAXY_YPOS_KEY, galaxy_z_key=GALAXY_ZPOS_KEY,
+                             galaxy_vx_key=GALAXY_XVEL_KEY, galaxy_vy_key=GALAXY_YVEL_KEY,
+                             galaxy_vz_key=GALAXY_ZVEL_KEY)
+        if DO_PLOTS:
+            from src.h2s_plots import plot_vtan_distribution
+            if DO_FLUX_CUT:
+                PLOT_VTAN_PROFILE = os.path.join(RESULTS_DIR, f"vtan_profile_{FLUX_MIN}.png")
+            else:
+                PLOT_VTAN_PROFILE = os.path.join(RESULTS_DIR, "vtan_profile.png")
+            plot_vtan_distribution(vtan_profile_file=VTAN_PROFILE, output_png=PLOT_VTAN_PROFILE, loglog=False, show=True)
+        
+        if DO_FIT_VTAN_PROFILE:
+            print("Fitting tangential velocity profile...")
+            from src.h2s_profile_vel import fit_vtheta_profile
+            if DO_FLUX_CUT:
+                FIT_VTAN_PROFILE = os.path.join(RESULTS_DIR, f"vtan_profile_fit_{FLUX_MIN}.png")
+            else:
+                FIT_VTAN_PROFILE = os.path.join(RESULTS_DIR, "vtan_profile_fit.png")
+            fit_vtheta_profile(vtheta_profile_file=VTAN_PROFILE, plot=True, output_png=FIT_VTAN_PROFILE,
+                                loglog=False, manual_params= MANUAL_PARAMS_VTAN)
+                                      
+    # ================= Kaiser Analysis =================
+
+    if DO_KAISER_ANALYSIS:
+        print("Performing Kaiser analysis...")
+        from src.h2s_plots import plot_kaiser_comparison
+        from src.h2s_io import kaiser_factor
+
+        fkaiser = kaiser_factor(omega_m=OMEGA_M, b=BIAS, gamma=GAMMA)
+        print(f"Kaiser factor: {fkaiser:.4f}")
+
+        if DO_PLOTS:
+            print("Plotting Kaiser comparison...")
+
+            if DO_FLUX_CUT:
+                REAL_FILE = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_{FLUX_MIN}.txt")
+                REDSHIFT_FILE = os.path.join(RESULTS_DIR, f"2PCF_Corrfunc_redshift_{FLUX_MIN}.txt")
+                KAISER_PNG = os.path.join(RESULTS_DIR, f"kaiser_comparison_{FLUX_MIN}.png")
+            else:
+                REAL_FILE = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_.txt")
+                REDSHIFT_FILE = os.path.join(RESULTS_DIR, "2PCF_Corrfunc_redshift.txt")
+                KAISER_PNG = os.path.join(RESULTS_DIR, "kaiser_comparison.png")
+
+        
+            plot_kaiser_comparison(real_file=REAL_FILE, redshift_file=REDSHIFT_FILE, omega_m=OMEGA_M, xlim = None, ylim=None,
+                                    b=BIAS, gamma=GAMMA, output_png=KAISER_PNG, show=True, loglog=True)
+        
+        if DO_KAISER_RATIO:
+            print("Calculating Kaiser ratio...")
+            from src.h2s_plots import plot_kaiser_ratio
+            if DO_FLUX_CUT:
+                KAISER_RATIO = os.path.join(RESULTS_DIR, f"kaiser_ratio_{FLUX_MIN}.png")
+            else:
+                KAISER_RATIO = os.path.join(RESULTS_DIR, "kaiser_ratio.png")
+            plot_kaiser_ratio(real_file=REAL_FILE, redshift_file=REDSHIFT_FILE, output_png=KAISER_RATIO,
+                                 omega_m=OMEGA_M, bias=BIAS, gamma=GAMMA, show=True, xlim=XLIM_KAISER, ylim=YLIM_KAISER)
+
+if __name__ == "__main__":
+    main()
