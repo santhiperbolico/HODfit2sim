@@ -436,7 +436,8 @@ def fit_vr_profile(
     plot=True,
     output_png=None,
     loglog=False,
-    manual_params=None
+    manual_params=None,
+    output_params_file=None
 ):
     """
     Fits the satellite radial-velocity profile with a sum of three *normalized* Gaussians.
@@ -461,6 +462,11 @@ def fit_vr_profile(
         print("Curve fit did not converge!")
         return None
 
+    if output_params_file is not None:
+        header = "A1,mu1,sigma1,A2,mu2,sigma2,A3,mu3,sigma3"
+        np.savetxt(output_params_file, np.array(popt).reshape(1,-1), delimiter=",", header=header, comments="")
+        print(f"Parameters saved to: {output_params_file}")
+        
     if plot:
         plt.figure(figsize=(7,5))
         if loglog:
@@ -496,7 +502,8 @@ def fit_vtheta_profile(
     plot=True,
     output_png=None,
     loglog=False,
-    manual_params=None 
+    manual_params=None,
+    output_params_file=None
 ):
     """
     Fits the tangential velocity profile with:
@@ -521,6 +528,11 @@ def fit_vtheta_profile(
     except RuntimeError:
         print("Curve fit did not converge!")
         return None
+    
+    if output_params_file is not None:
+        header = "y0,alpha,kappa,beta"
+        np.savetxt(output_params_file, np.array(popt).reshape(1,-1), delimiter=",", header=header, comments="")
+        print(f"Parameters saved to: {output_params_file}")
 
     if plot:
         plt.figure(figsize=(7,5))

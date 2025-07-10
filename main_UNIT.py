@@ -114,7 +114,7 @@ DO_FLUX_CUT = True           # If True, applies a flux cut to the galaxy sample
 
 # Input and output file paths
 BASE_DIR = "/home2/guillermo/TFM_JOAQUIN"        # Base directory for the project
-RESULTS_DIR = os.path.join(BASE_DIR, "tests")    # Directory for results  
+RESULTS_DIR = os.path.join(BASE_DIR, "output")    # Directory for results  
 DATA_DIR = os.path.join(BASE_DIR, "data")        # Directory for input data files
 os.makedirs(RESULTS_DIR, exist_ok=True)          # Create results directory if it doesn't exist
 os.makedirs(DATA_DIR, exist_ok=True)             # Create data directory if it doesn't exist
@@ -179,7 +179,7 @@ if INPUT_HALO_FORMAT == "txt":
 # ========= 2. Two Point Correlation Function. Real Space ===========
 # ===================================================================
 
-DO_CORRELATION_FUNC_REAL_SPACE = True  # If True, computes the 2PCF in real space
+DO_CORRELATION_FUNC_REAL_SPACE = False  # If True, computes the 2PCF in real space
 NBINS_2PCF_REAL = 80                    # Number of bins
 RMAX_2PCF_REAL = 140.0                  # Maximum distance in Mpc/h
 RMIN_2PCF_REAL = 1.4e-3                 # Minimum distance in Mpc/h
@@ -192,7 +192,7 @@ YLIM_2PCF_RATIO = (0.5, 1.4)            # Y-axis limits for 2PCF ratio plot (Non
 # ======== 3. Two Point Correlation Function. Redshift Space =========
 # ====================================================================
 
-DO_CORRELATION_FUNC_REDSHIFT_SPACE = True  # If True, computes the 2PCF in redshift space
+DO_CORRELATION_FUNC_REDSHIFT_SPACE = False  # If True, computes the 2PCF in redshift space
 NBINS_2PCF_REDSHIFT = 80                   # Number of bins
 RMAX_2PCF_REDSHIFT = 140.0                 # Maximum distance in Mpc/h
 RMIN_2PCF_REDSHIFT = 1.4e-3                # Minimum distance in Mpc/h
@@ -208,7 +208,7 @@ M_MIN_CONFORMITY = 10.5                   # Minimum halo mass for conformity ana
 M_MAX_CONFORMITY = 14.5                   # Maximum halo mass for conformity analysis (logarithmic scale)
 N_BINS_CONFORMITY = 70                    # Number of bins for halo mass in conformity analysis
 BIN_WIDTH_CONFORMITY = 0.057              # Width of each bin in logarithmic scale
-DO_HMF_COMPARISON = True                 # If True, compares halo mass functions (HMF) between original and shuffled catalogs
+DO_HMF_COMPARISON = False                 # If True, compares halo mass functions (HMF) between original and shuffled catalogs
 BINNING_HMF= np.linspace(10.5, 14.5, 71)  # Mass binning for HMF comparison in logarithmic scale
 
 # ====================================================================
@@ -242,10 +242,10 @@ MANUAL_PARAMS_VTAN = None                 # Manual parameters for fitting (if ne
 # ================= 10. Kaiser Analysis ==============================
 # ====================================================================
 
-DO_KAISER_ANALYSIS = True            # If True, performs Kaiser analysis
+DO_KAISER_ANALYSIS = False            # If True, performs Kaiser analysis
 BIAS = 1.86                          # Bias parameter for ELGs
 GAMMA = 0.55                         # Gamma parameter for Kaiser analysis
-DO_KAISER_RATIO = True               # If True, computes Kaiser ratio between redshift and real space
+DO_KAISER_RATIO = False               # If True, computes Kaiser ratio between redshift and real space
 XLIM_KAISER = (0.1,100)              # X-axis limits for Kaiser ratio plot (None for automatic)
 YLIM_KAISER = (0.75,1.5)             # Y-axis limits for Kaiser ratio plot (None for automatic)
 
@@ -253,7 +253,7 @@ YLIM_KAISER = (0.75,1.5)             # Y-axis limits for Kaiser ratio plot (None
 # ===================== 11. Shuffling ================================
 # ====================================================================
 
-DO_SHUFFLING = True               # If True, shuffles the galaxy catalogue
+DO_SHUFFLING = False               # If True, shuffles the galaxy catalogue
 N_BINS_SHUFFLING = 70              # Number of bins for halo mass in shuffling
 M_MIN_SHUFFLING = 10.5             # Minimum halo mass for shuffling (logarithmic scale)
 M_MAX_SHUFFLING = 14.5             # Maximum halo mass for shuffling (logarithmic scale)
@@ -496,9 +496,9 @@ def main():
                 else:
                     FIT_RADIAL_PROFILE = os.path.join(RESULTS_DIR, "radial_profile_fit.png")
                 
-                params = np.loadtxt(FIT_RADIAL_PROFILE_PARAMS, delimiter=",", skiprows=1).flatten()
+                params_radial = np.loadtxt(FIT_RADIAL_PROFILE_PARAMS, delimiter=",", skiprows=1).flatten()
                 plot_radial_profile_fit(profile_file=RADIAL_PROFILE, output_png=FIT_RADIAL_PROFILE,
-                                        params = params, show=True, loglog=True)
+                                        params = params_radial, show=True, loglog=True)
 
     # ========== Calculate Radial Velocity Profile ===========
 
@@ -535,10 +535,13 @@ def main():
             from src.h2s_profile_vel import fit_vr_profile
             if DO_FLUX_CUT:
                 FIT_VR_PROFILE = os.path.join(RESULTS_DIR, f"vr_profile_fit_{FLUX_MIN}.png")
+                FIT_VR_PROFILE_PARAMS = os.path.join(RESULTS_DIR, f"vr_profile_fit_params_{FLUX_MIN}.txt")
             else:
+                FIT_VR_PROFILE_PARAMS = os.path.join(RESULTS_DIR, "vr_profile_fit_params.txt")
                 FIT_VR_PROFILE = os.path.join(RESULTS_DIR, "vr_profile_fit.png")
+
             fit_vr_profile(vr_profile_file=VR_PROFILE, plot=True, output_png=FIT_VR_PROFILE,
-                           loglog=False, manual_params=MANUAL_PARAMS_VR)
+                           loglog=False, manual_params=MANUAL_PARAMS_VR, output_params_file=FIT_VR_PROFILE_PARAMS)
 
     # ========== Calculate Tangential Velocity Profile ===========
 
@@ -573,9 +576,11 @@ def main():
             from src.h2s_profile_vel import fit_vtheta_profile
             if DO_FLUX_CUT:
                 FIT_VTAN_PROFILE = os.path.join(RESULTS_DIR, f"vtan_profile_fit_{FLUX_MIN}.png")
+                FIT_VTAN_PROFILE_PARAMS = os.path.join(RESULTS_DIR, f"vtan_profile_fit_params_{FLUX_MIN}.txt")
             else:
                 FIT_VTAN_PROFILE = os.path.join(RESULTS_DIR, "vtan_profile_fit.png")
-            fit_vtheta_profile(vtheta_profile_file=VTAN_PROFILE, plot=True, output_png=FIT_VTAN_PROFILE,
+                FIT_VTAN_PROFILE_PARAMS = os.path.join(RESULTS_DIR, "vtan_profile_fit_params.txt")
+            fit_vtheta_profile(vtheta_profile_file=VTAN_PROFILE, plot=True, output_png=FIT_VTAN_PROFILE, output_params_file= FIT_VTAN_PROFILE_PARAMS,
                                 loglog=False, manual_params= MANUAL_PARAMS_VTAN)
                                       
     # ================= Kaiser Analysis =================
@@ -613,6 +618,130 @@ def main():
                 KAISER_RATIO = os.path.join(RESULTS_DIR, "kaiser_ratio.png")
             plot_kaiser_ratio(real_file=REAL_FILE, redshift_file=REDSHIFT_FILE, output_png=KAISER_RATIO,
                                  omega_m=OMEGA_M, bias=BIAS, gamma=GAMMA, show=True, xlim=XLIM_KAISER, ylim=YLIM_KAISER)
+
+        
+    # ============ Write master output file: h2s_output.h5 ============
+
+    # Path for the master output file
+    MASTER_OUTPUT = os.path.join(RESULTS_DIR, "h2s_output.h5")
+
+    # Load per-bin data from conformity, radial profile, VR, and VTAN files
+    with h5py.File(CONFORMITY, "r") as f_conf, \
+         h5py.File(RADIAL_PROFILE, "r") as f_radial, \
+         h5py.File(VR_PROFILE, "r") as f_vr, \
+         h5py.File(VTAN_PROFILE, "r") as f_vtan:
+
+       # ---- GLOBAL CONSTANTS/HEADER ----
+       # Conformity global parameters
+        k1_global = f_conf["data/global/k1_global"][()]
+        k2_global = f_conf["data/global/k2_global"][()]
+    
+        # Cosmology & run config
+        z_snap = Z_SNAP
+        omega_m = OMEGA_M
+        omega_l = OMEGA_L
+        h_param = h
+        boxsize = BOXSIZE
+
+        # Fit parameters: must have been assigned after running the fits!
+        
+        params_vtan = np.loadtxt(FIT_VTAN_PROFILE_PARAMS, delimiter=",", skiprows=1).flatten()
+        params_vr = np.loadtxt(FIT_VR_PROFILE_PARAMS, delimiter=",", skiprows=1).flatten()
+        alpha, beta, r0, N0, kappa = params_radial
+        vtan_y0, vtan_alpha, vtan_beta, vtan_kappa = params_vtan
+        (vr_A1, vr_mu1, vr_sigma1, 
+         vr_A2, vr_mu2, vr_sigma2, 
+         vr_A3, vr_mu3, vr_sigma3) = params_vr
+
+        # ---- DATA BLOCKS: Load per-bin data from each file ----
+        # Conformity
+        conf_bins = f_conf["data/bins"]
+        M_min = conf_bins["M_min_bin"][:]
+        M_max = conf_bins["M_max_bin"][:]
+        N_halo = conf_bins["N_Halos"][:]
+        k1 = conf_bins["k1"][:]
+        k2 = conf_bins["k2"][:]
+        Nsat = conf_bins["N_S"][:]    # satellites per bin
+        Ncen = conf_bins["N_C"][:]    # centrals per bin
+
+        # Radial profile
+        r_centers = f_radial['radial_bins'][:]
+        Nsat_r = f_radial['counts'][:]
+        dr = np.diff(r_centers)
+        edges = np.concatenate(([r_centers[0] - dr[0]/2], r_centers[:-1] + dr/2, [r_centers[-1] + dr[-1]/2]))
+        r_min = edges[:-1]
+        r_max = edges[1:]
+
+        # VR profile
+        vr_centers = f_vr["velocity_bins"][:]
+        dvr = np.diff(vr_centers)
+        vr_edges = np.concatenate(([vr_centers[0] - dvr[0]/2], vr_centers[:-1] + dvr/2, [vr_centers[-1] + dvr[-1]/2]))
+        Nsat_vr = f_vr["density"][:]
+        vr_min = vr_edges[:-1]
+        vr_max = vr_edges[1:]
+
+        # VTAN profile
+        vtan_centers = f_vtan["velocity_bins"][:]
+        dvtan = np.diff(vtan_centers)
+        vtan_edges = np.concatenate(([vtan_centers[0] - dvtan[0]/2], vtan_centers[:-1] + dvtan/2, [vtan_centers[-1] + dvtan[-1]/2]))
+        Nsat_vtan = f_vtan["density"][:]
+        vtan_min = vtan_edges[:-1]
+        vtan_max = vtan_edges[1:]
+
+    # --------- Write master output HDF5 ---------
+    with h5py.File(MASTER_OUTPUT, "w") as f:
+        # HEADER group with attributes
+        header = f.create_group("header")
+        header.attrs["K1_global"] = k1_global
+        header.attrs["K2_global"] = k2_global
+        header.attrs["z_snap"] = z_snap
+        header.attrs["omega_m"] = omega_m
+        header.attrs["omega_l"] = omega_l
+        header.attrs["h"] = h_param
+        header.attrs["boxsize"] = boxsize
+        header.attrs["alpha"] = alpha
+        header.attrs["beta"] = beta
+        header.attrs["kappa"] = kappa
+        header.attrs["N0"] = N0
+        header.attrs["r0"] = r0
+        header.attrs["vtan_y0"] = vtan_y0
+        header.attrs["vtan_alpha"] = vtan_alpha
+        header.attrs["vtan_beta"] = vtan_beta
+        header.attrs["vtan_kappa"] = vtan_kappa
+        header.attrs["vr_A1"] = vr_A1
+        header.attrs["vr_mu1"] = vr_mu1
+        header.attrs["vr_sigma1"] = vr_sigma1
+        header.attrs["vr_A2"] = vr_A2
+        header.attrs["vr_mu2"] = vr_mu2
+        header.attrs["vr_sigma2"] = vr_sigma2
+        header.attrs["vr_A3"] = vr_A3
+        header.attrs["vr_mu3"] = vr_mu3
+        header.attrs["vr_sigma3"] = vr_sigma3
+
+        # DATA group with all bin-wise arrays
+        data = f.create_group("data")
+        # Conformity
+        data.create_dataset("M_min", data=M_min)
+        data.create_dataset("M_max", data=M_max)
+        data.create_dataset("N_halo", data=N_halo)
+        data.create_dataset("k1", data=k1)
+        data.create_dataset("k2", data=k2)
+        data.create_dataset("Nsat", data=Nsat)
+        data.create_dataset("Ncen", data=Ncen)
+        # Radial profile
+        data.create_dataset("r_min", data=r_min)
+        data.create_dataset("r_max", data=r_max)
+        data.create_dataset("Nsat_r", data=Nsat_r)
+        # VR profile
+        data.create_dataset("vr_min", data=vr_min)
+        data.create_dataset("vr_max", data=vr_max)
+        data.create_dataset("Nsat_vr", data=Nsat_vr)
+        # VTAN profile
+        data.create_dataset("vtan_min", data=vtan_min)
+        data.create_dataset("vtan_max", data=vtan_max)
+        data.create_dataset("Nsat_vtan", data=Nsat_vtan)
+
+    print(f"\n[INFO] Master output file written: {MASTER_OUTPUT}\n")
 
 if __name__ == "__main__":
     main()

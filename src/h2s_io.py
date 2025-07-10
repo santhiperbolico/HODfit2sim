@@ -70,6 +70,95 @@ def print_h5attr(infile,inhead='Header'):
 
     return ' '
 
+def generate_header(filenom, infile,redshift,snap,
+                    h0,omega0,lambda0,vol,
+                    units_h0=False,outpath=None,verbose=True):
+    """
+    Generate the header of the file with the line data
+
+    Parameters
+    -----------
+    infile : string
+        Path to input
+    zz: float
+        Redshift of the simulation snapshot
+    snap: integer
+        Simulation snapshot number
+    h0 : float
+        Hubble constant divided by 100
+    omega0 : float
+        Matter density at z=0
+    omegab : float
+        Baryonic density at z=0
+    lambda0 : float
+        Cosmological constant z=0
+    vol : float
+        Simulation volume
+    units_h0: boolean
+        True if input units with h
+    outpath : string
+        Path to output
+    verbose : bool
+        True for messages
+ 
+    Returns
+    -----
+    filenom : string
+       Full path to the output file
+    """
+
+    # Change units if required
+    if units_h0:
+        vol = vol/(h0*h0*h0)
+    
+    # Generate the output file (the file is rewrtitten)
+    hf = h5py.File(filenom, 'w')
+
+    # Generate a header
+    headnom = 'header'
+    head = hf.create_dataset(headnom,(100,))
+    head.attrs[u'redshift'] = redshift
+    head.attrs[u'h0'] = h0
+    head.attrs[u'omega0'] = omega0
+    head.attrs[u'lambda0'] = lambda0
+    head.attrs[u'vol_Mpc3'] = vol
+    hf.close()
+    
+    return filenom
+
+
+def add2header(filenom,names,values,verbose=True):
+    """
+    Add attributes to header
+
+    Parameters
+    -----------
+    filenom : string
+        Path to file 
+    names : list of strings
+        Atribute names
+    values: list
+        Values of attributes
+    verbose : bool
+        True for messages
+    """
+    
+    # Open the file header
+    hf = h5py.File(filenom, 'a')
+    head = hf['header']
+    
+    # Append attributes
+    count = 0
+    for ii, nom in enumerate(names):
+        if nom is not None:
+            head.attrs[nom] = values[ii]
+            count += 1
+    hf.close()
+
+    if verbose: print(f'* gne_io.add2header: Appended {count} attributes out of {len(names)}')
+    
+    return count
+
 def get_nheader(infile,firstchar=None):
     '''
     Given a text file with a structure: header+data, 
