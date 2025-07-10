@@ -5,15 +5,16 @@ code2run = 'get_sample'  # Make a cut in one property to generate (shuffled) sam
 #code2run = 'run_HOD'
 
 # Name of the simulation and work environment
-simtype = 'BAHAMAS'
-env = 'arilega'
+simtype = 'BAHAMAS'; env = 'arilega'
 
 # Simulations and redshifts
-sims = ['HIRES/AGN_RECAL_nu0_L100N512_WMAP9']
+#sims = ['HIRES/AGN_RECAL_nu0_L100N512_WMAP9']; snaps = [31]
 snaps = [31]
+sims = 
 
 # Path for output
-dirout = '/users/arivgonz/output/Junk/'
+#dirout = '/users/arivgonz/output/Junk/'
+dirout = '/users/arivgonz/output/Junk/' # Cambiar por directorio junk
 
 # Consider haloes with more than npmin particles
 npmin = 20
