@@ -126,8 +126,8 @@ os.makedirs(RESULTS_DIR, exist_ok=True)          # Create results directory if i
 os.makedirs(DATA_DIR, exist_ok=True)             # Create data directory if it doesn't exist
 
 # Input files
-GALAXY_FILE = os.path.join(DATA_DIR, "UNITSIM1_model_z1.321_ELGs_1000000.h5")        # Input galaxy file
-HALO_FILE = os.path.join(DATA_DIR, "Halos_tree_DOC_PID_Vmax_all_Mass_30000000.txt")   # Input halo file
+GALAXY_FILE = os.path.join(DATA_DIR, "UNITSIM1_model_z1.321_ELGs_100000.h5")        # Input galaxy file
+HALO_FILE = os.path.join(DATA_DIR, "Halos_tree_DOC_PID_Vmax_all_Mass_100000.txt")   # Input halo file
 
 # Input file formats
 INPUT_GALAXY_FORMAT = "h5"                       # Input Halaxy file format ('h5', 'txt')
