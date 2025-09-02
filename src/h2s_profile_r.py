@@ -330,3 +330,125 @@ def compute_radial_profile(
 
     if verbose:
         print(" Radial profile stored successfully.")
+
+def compute_radial_profile_shuffled(
+    galaxy_file,
+    halo_file,
+    output_file,
+    boxsize=1000.0,
+    bins=np.linspace(0, 1.5, 151),
+    halo_format="txt",
+    halo_id_key=1,
+    halo_pid_key=13,
+    halo_x_key=3,
+    halo_y_key=4,
+    halo_z_key=5,
+    galaxy_id_key="MainHaloID",
+    galaxy_is_central_key="is_central",
+    galaxy_x_key="Xpos",
+    galaxy_y_key="Ypos",
+    galaxy_z_key="Zpos",
+    verbose=True
+):
+    """
+    Computes the radial profile of satellite galaxies using true halo positions (parent halos only).
+    Satellites are matched to their parent halos (pid==-1) by ID.
+
+    Parameters
+    ----------
+    galaxy_file : str
+        Path to the HDF5 file containing galaxy data.
+    halo_file : str
+        Path to the halos catalog (TXT or HDF5, currently assumes TXT).
+    output_file : str
+        HDF5 file where the radial profile will be saved.
+    boxsize : float
+        Simulation box size.
+    bins : array_like
+        Bins for radial profile.
+    halo_format : str
+        Format of the halo catalog ('txt' or 'hdf5').
+    halo_id_key, halo_pid_key, halo_x_key, halo_y_key, halo_z_key : int or str
+        Columns/fields for halo ID, parent ID, and positions.
+    galaxy_*_key : str
+        Names of the datasets for galaxy IDs and positions.
+    verbose : bool
+        If True, print progress.
+    """
+    check_file(galaxy_file, verbose=True)
+    check_file(halo_file, verbose=True)
+
+    # 1. Load parent halos and build halo_pos_dict
+    if halo_format == "txt":
+        halos = np.loadtxt(halo_file)
+        # filter parent halos (pid == -1)
+        parent_mask = halos[:, halo_pid_key] == -1
+        parent_ids = halos[parent_mask, halo_id_key]
+        parent_x = halos[parent_mask, halo_x_key]
+        parent_y = halos[parent_mask, halo_y_key]
+        parent_z = halos[parent_mask, halo_z_key]
+    else:
+        raise NotImplementedError("Only txt halos implemented for now.")
+
+    halo_pos_dict = {hid: (x, y, z) for hid, x, y, z in zip(parent_ids, parent_x, parent_y, parent_z)}
+
+    if verbose:
+        print(f"Loaded {len(halo_pos_dict)} parent halos from {halo_file}.")
+
+    # 2. Load galaxies (assumes HDF5)
+    with h5py.File(galaxy_file, "r") as f:
+        is_central = f[galaxy_is_central_key][:]
+        main_id = f[galaxy_id_key][:]
+        xpos = f[galaxy_x_key][:]
+        ypos = f[galaxy_y_key][:]
+        zpos = f[galaxy_z_key][:]
+
+    # 3. Identify satellites
+    is_sat = (is_central == 0)
+    xs = xpos[is_sat]
+    ys = ypos[is_sat]
+    zs = zpos[is_sat]
+    halo_ids = main_id[is_sat]  # For each satellite, its parent halo ID
+
+    # 4. Match satellite galaxies to their halo positions
+    xc, yc, zc = [], [], []
+    missing = 0
+
+    for hid in halo_ids:
+        if hid in halo_pos_dict:
+            xh, yh, zh = halo_pos_dict[hid]
+        else:
+            xh, yh, zh = np.nan, np.nan, np.nan
+            missing += 1
+        xc.append(xh)
+        yc.append(yh)
+        zc.append(zh)
+
+    xc, yc, zc = np.array(xc), np.array(yc), np.array(zc)
+
+    if missing > 0:
+        print(f"  {missing} satellites have no matching parent halo. Distances set to NaN.")
+
+    # 5. Compute distances
+    distances = get_r(xs, ys, zs, xc, yc, zc, box=boxsize)
+    valid = np.isfinite(distances) & (distances >= 0)
+    distances = distances[valid]
+
+    # 6. Build histogram
+    hist, bin_edges = np.histogram(distances, bins=bins)
+    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    dbins = bin_edges[-1] - bin_edges[-2]
+
+    if verbose:
+        print(f" Radial profile: {len(hist)} computed bins.")
+        print(f" Results written to {output_file}")
+
+    with h5py.File(output_file, "w") as fout:
+        fout.create_dataset("radial_bins", data=bin_centers)
+        fout.create_dataset("counts", data=hist)
+        fout.attrs["boxsize"] = boxsize
+        fout.attrs["n_bins"] = len(hist)
+        fout.attrs["n_satellites"] = len(distances)
+
+    if verbose:
+        print(" Radial profile stored successfully.")

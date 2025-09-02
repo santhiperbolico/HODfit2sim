@@ -271,6 +271,150 @@ def compute_vr_profile(
         print("v_r profile stored successfully.")
     return output_file
 
+def compute_vr_profile_shuffled(
+    galaxy_file,
+    halo_file,
+    output_file,
+    boxsize=1000.0,
+    bins=np.linspace(-1000, 1000, 201),
+    halo_format="txt",
+    halo_id_key=1,
+    halo_pid_key=13,
+    halo_x_key=4,
+    halo_y_key=5,
+    halo_z_key=6,
+    halo_vx_key=7,
+    halo_vy_key=8,
+    halo_vz_key=9,
+    galaxy_main_id_key="MainHaloID",
+    galaxy_is_central_key="is_central",
+    galaxy_x_key="Xpos",
+    galaxy_y_key="Ypos",
+    galaxy_z_key="Zpos",
+    galaxy_vx_key="Xvel",
+    galaxy_vy_key="Yvel",
+    galaxy_vz_key="Zvel",
+    verbose=True
+):
+    """
+    Compute the radial-velocity distribution (density) of satellite galaxies
+    relative to their parent halo positions and velocities.
+
+    Parameters:
+    -----------
+    galaxy_file : str
+        Path to the HDF5 file containing galaxy data.
+    halo_file : str
+        Path to the halos catalog (TXT or HDF5, currently assumes TXT).
+    output_file : str
+        Path for output HDF5 file.
+    boxsize : float
+        Simulation box size (for periodic boundaries).
+    bins : array_like
+        Edges of the velocity bins.
+    halo_format : str
+        Format of the halo file ('txt' or 'hdf5').
+    halo_id_key, halo_pid_key, halo_x_key, halo_y_key, halo_z_key, halo_vx_key, halo_vy_key, halo_vz_key : int or str
+        Columns/keys for halo ID, parent ID, positions, and velocities.
+    galaxy_*_key : str
+        Names of the datasets for galaxy IDs, positions, and velocities.
+    verbose : bool
+        If True, print progress.
+    """
+    check_file(galaxy_file, verbose=verbose)
+    check_file(halo_file, verbose=verbose)
+
+    # 1. Load parent halos and build halo_dict
+    if halo_format == "txt":
+        halos = np.loadtxt(halo_file)
+        parent_mask = halos[:, halo_pid_key] == -1
+        parent_ids = halos[parent_mask, halo_id_key]
+        parent_x = halos[parent_mask, halo_x_key]
+        parent_y = halos[parent_mask, halo_y_key]
+        parent_z = halos[parent_mask, halo_z_key]
+        parent_vx = halos[parent_mask, halo_vx_key]
+        parent_vy = halos[parent_mask, halo_vy_key]
+        parent_vz = halos[parent_mask, halo_vz_key]
+    else:
+        raise NotImplementedError("Only txt halos implemented for now.")
+
+    halo_dict = {hid: (x, y, z, vx, vy, vz)
+                 for hid, x, y, z, vx, vy, vz in zip(parent_ids, parent_x, parent_y, parent_z, parent_vx, parent_vy, parent_vz)}
+
+    if verbose:
+        print(f"Loaded {len(halo_dict)} parent halos from {halo_file}.")
+
+    # 2. Load galaxies
+    with h5py.File(galaxy_file, "r") as f:
+        is_central = f[galaxy_is_central_key][:]
+        main_id = f[galaxy_main_id_key][:]
+        xpos = f[galaxy_x_key][:]
+        ypos = f[galaxy_y_key][:]
+        zpos = f[galaxy_z_key][:]
+        vx = f[galaxy_vx_key][:]
+        vy = f[galaxy_vy_key][:]
+        vz = f[galaxy_vz_key][:]
+
+    # 3. Identify satellites
+    is_sat = (is_central == 0)
+    xs = xpos[is_sat]
+    ys = ypos[is_sat]
+    zs = zpos[is_sat]
+    vxs = vx[is_sat]
+    vys = vy[is_sat]
+    vzs = vz[is_sat]
+    halo_ids = main_id[is_sat]
+
+    n_sat = len(xs)
+    xh, yh, zh = np.full(n_sat, np.nan), np.full(n_sat, np.nan), np.full(n_sat, np.nan)
+    vxh, vyh, vzh = np.full(n_sat, np.nan), np.full(n_sat, np.nan), np.full(n_sat, np.nan)
+    missing = 0
+
+    for i, hid in enumerate(halo_ids):
+        if hid in halo_dict:
+            xh[i], yh[i], zh[i], vxh[i], vyh[i], vzh[i] = halo_dict[hid]
+        else:
+            missing += 1
+
+    if missing > 0 and verbose:
+        print(f"  {missing} satellites have no matching parent halo. Setting to NaN.")
+
+    # 4. Compute radial velocities
+    if verbose:
+        print("Computing radial velocities (v_r) for satellites w.r.t. parent halo...")
+    vr_all = get_vr(
+        xh, yh, zh, xs, ys, zs,
+        vxh, vyh, vzh, vxs, vys, vzs,
+        box=boxsize
+    )
+
+    # Keep only finite values
+    mask = np.isfinite(vr_all)
+    vr = vr_all[mask]
+    n_used = len(vr)
+
+    if verbose:
+        print(f"Number of valid satellite v_r: {n_used}")
+
+    # Compute histogram: counts per bin, then density = counts / bin_width
+    hist, bin_edges = np.histogram(vr, bins=bins)
+    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    bin_widths = np.diff(bin_edges)
+    density = hist / bin_widths
+
+    # Save to HDF5
+    if verbose:
+        print(f"Writing v_r profile density to {output_file}")
+    with h5py.File(output_file, "w") as fout:
+        fout.create_dataset("velocity_bins", data=bin_centers)
+        fout.create_dataset("density", data=density)
+        fout.attrs["n_bins"] = len(bin_centers)
+        fout.attrs["n_galaxies"] = len(vr)
+
+    if verbose:
+        print("v_r profile stored successfully.")
+    return output_file
+
 def compute_vtan_profile(
     galaxy_file,
     halo_file,
@@ -359,6 +503,160 @@ def compute_vtan_profile(
 
     # 3. Identify satellites
     is_sat = host_id != main_id
+    xs = xpos[is_sat]
+    ys = ypos[is_sat]
+    zs = zpos[is_sat]
+    vxs = vx[is_sat]
+    vys = vy[is_sat]
+    vzs = vz[is_sat]
+    halo_ids = main_id[is_sat]
+
+    n_sat = len(xs)
+    xh, yh, zh = np.full(n_sat, np.nan), np.full(n_sat, np.nan), np.full(n_sat, np.nan)
+    vxh, vyh, vzh = np.full(n_sat, np.nan), np.full(n_sat, np.nan), np.full(n_sat, np.nan)
+    missing = 0
+
+    for i, hid in enumerate(halo_ids):
+        if hid in halo_dict:
+            xh[i], yh[i], zh[i], vxh[i], vyh[i], vzh[i] = halo_dict[hid]
+        else:
+            missing += 1
+
+    if missing > 0 and verbose:
+        print(f"  {missing} satellites have no matching parent halo. Setting to NaN.")
+
+    # 4. Compute relative velocities
+    dvx = vxs - vxh
+    dvy = vys - vyh
+    dvz = vzs - vzh
+    # Relative velocity modulus |v| (no periodicity correction needed for velocities)
+    vmod = np.sqrt(dvx**2 + dvy**2 + dvz**2)
+
+    # 5. Compute v_r using get_vr (this will use box for positions, but NOT for velocities)
+    vr_all = get_vr(
+        xh, yh, zh, xs, ys, zs,
+        vxh, vyh, vzh, vxs, vys, vzs,
+        box=boxsize
+    )
+
+    # 6. Compute |v_tan| = sqrt(|v|^2 - v_r^2)
+    vtan_all = np.sqrt(np.maximum(0, vmod**2 - vr_all**2))  # avoid negatives from float errors
+
+    # Keep only finite values
+    mask = np.isfinite(vtan_all)
+    vtan = vtan_all[mask]
+    n_used = len(vtan)
+
+    if verbose:
+        print(f"Number of valid satellite v_tan: {n_used}")
+
+    # Compute histogram: counts per bin, then density = counts / bin_width
+    hist, bin_edges = np.histogram(vtan, bins=bins)
+    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    bin_widths = np.diff(bin_edges)
+    density = hist / bin_widths
+
+    # Save to HDF5
+    if verbose:
+        print(f"Writing v_tan profile density to {output_file}")
+    with h5py.File(output_file, "w") as fout:
+        fout.create_dataset("velocity_bins", data=bin_centers)
+        fout.create_dataset("density", data=density)
+        fout.attrs["n_bins"] = len(bin_centers)
+        fout.attrs["n_galaxies"] = n_used
+
+    if verbose:
+        print("v_tan profile stored successfully.")
+    return output_file
+
+def compute_vtan_profile_shuffled(
+    galaxy_file,
+    halo_file,
+    output_file,
+    boxsize=1000.0,
+    bins=np.linspace(0, 1000, 201),
+    halo_format="txt",
+    halo_id_key=1,
+    halo_pid_key=13,
+    halo_x_key=3,
+    halo_y_key=4,
+    halo_z_key=5,
+    halo_vx_key=6,
+    halo_vy_key=7,
+    halo_vz_key=8,
+    galaxy_main_id_key="MainHaloID",
+    galaxy_is_central_key="is_central",
+    galaxy_x_key="Xpos",
+    galaxy_y_key="Ypos",
+    galaxy_z_key="Zpos",
+    galaxy_vx_key="Xvel",
+    galaxy_vy_key="Yvel",
+    galaxy_vz_key="Zvel",
+    verbose=True
+):
+    """
+    Compute the tangential velocity (v_tan) profile of satellite galaxies with respect to their parent halos.
+    Uses |v_tan| = sqrt(|v|^2 - v_r^2), where:
+      - |v| is the relative speed between satellite and halo,
+      - v_r is the radial component (already calculated using get_vr).
+
+    Parameters:
+    -----------
+    galaxy_file : str
+        Path to the HDF5 file containing galaxy data.
+    halo_file : str
+        Path to the halos catalog (TXT or HDF5, currently assumes TXT).
+    output_file : str
+        Path for output HDF5 file.
+    boxsize : float
+        Simulation box size (for periodic boundaries, applied only to positions).
+    bins : array_like
+        Edges of the velocity bins.
+    halo_format : str
+        Format of the halo file ('txt' or 'hdf5').
+    col_id, col_pid, col_x, col_y, col_z, col_vx, col_vy, col_vz : int or str
+        Columns/keys for halo ID, parent ID, positions, and velocities.
+    galaxy_*_key : str
+        Names of the datasets for galaxy IDs, positions, and velocities.
+    verbose : bool
+        If True, print progress.
+    """
+    check_file(galaxy_file, verbose=verbose)
+    check_file(halo_file, verbose=verbose)
+
+    # 1. Load parent halos and build halo_dict
+    if halo_format == "txt":
+        halos = np.loadtxt(halo_file)
+        parent_mask = halos[:, halo_pid_key] == -1
+        parent_ids = halos[parent_mask, halo_id_key]
+        parent_x = halos[parent_mask, halo_x_key]
+        parent_y = halos[parent_mask, halo_y_key]
+        parent_z = halos[parent_mask, halo_z_key]
+        parent_vx = halos[parent_mask, halo_vx_key]
+        parent_vy = halos[parent_mask, halo_vy_key]
+        parent_vz = halos[parent_mask, halo_vz_key]
+    else:
+        raise NotImplementedError("Only txt halos implemented for now.")
+
+    halo_dict = {hid: (x, y, z, vx, vy, vz)
+                 for hid, x, y, z, vx, vy, vz in zip(parent_ids, parent_x, parent_y, parent_z, parent_vx, parent_vy, parent_vz)}
+
+    if verbose:
+        print(f"Loaded {len(halo_dict)} parent halos from {halo_file}.")
+
+    # 2. Load galaxies
+    with h5py.File(galaxy_file, "r") as f:
+        is_central = f[galaxy_is_central_key][:]
+        main_id = f[galaxy_main_id_key][:]
+        xpos = f[galaxy_x_key][:]
+        ypos = f[galaxy_y_key][:]
+        zpos = f[galaxy_z_key][:]
+        vx = f[galaxy_vx_key][:]
+        vy = f[galaxy_vy_key][:]
+        vz = f[galaxy_vz_key][:]
+
+    # 3. Identify satellites
+    is_sat = (is_central == 0)
     xs = xpos[is_sat]
     ys = ypos[is_sat]
     zs = zpos[is_sat]
