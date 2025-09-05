@@ -70,6 +70,52 @@ def print_h5attr(infile,inhead='Header'):
 
     return ' '
 
+def get_nheader(infile,firstchar=None):
+    '''
+    Given a text file with a structure: header+data, 
+    counts the number of header lines
+
+    Parameters
+    -------
+    infile : string
+        Input file
+
+    Returns
+    -------
+    ih : integer
+        Number of lines with the header text
+    '''
+
+
+    ih = 0
+    with open(infile,'r') as ff:
+        for line in ff:
+            if not line.strip():
+                # Count any empty lines in the header
+                ih += 1
+            else:
+                sline = line.strip()
+                
+                # Check that the first character is not a digit
+                char1 = sline[0]
+                word1 = sline.split()[0]
+                if not firstchar:
+                    if (not char1.isdigit()):
+                        if (char1 != '-'):
+                            ih += 1
+                        else:
+                            try:
+                                float(word1)
+                                return ih
+                            except:
+                                ih += 1
+                    else:
+                        return ih
+                else:
+                    if char1 == firstchar:
+                        ih+=1
+    return ih
+        
 def generate_header(filenom, infile,redshift,snap,
                     h0,omega0,lambda0,vol,
                     units_h0=False,outpath=None,verbose=True):
@@ -158,53 +204,6 @@ def add2header(filenom,names,values,verbose=True):
     if verbose: print(f'* gne_io.add2header: Appended {count} attributes out of {len(names)}')
     
     return count
-
-def get_nheader(infile,firstchar=None):
-    '''
-    Given a text file with a structure: header+data, 
-    counts the number of header lines
-
-    Parameters
-    -------
-    infile : string
-        Input file
-
-    Returns
-    -------
-    ih : integer
-        Number of lines with the header text
-    '''
-
-
-    ih = 0
-    with open(infile,'r') as ff:
-        for line in ff:
-            if not line.strip():
-                # Count any empty lines in the header
-                ih += 1
-            else:
-                sline = line.strip()
-                
-                # Check that the first character is not a digit
-                char1 = sline[0]
-                word1 = sline.split()[0]
-                if not firstchar:
-                    if (not char1.isdigit()):
-                        if (char1 != '-'):
-                            ih += 1
-                        else:
-                            try:
-                                float(word1)
-                                return ih
-                            except:
-                                ih += 1
-                    else:
-                        return ih
-                else:
-                    if char1 == firstchar:
-                        ih+=1
-    return ih
-        
 
 
 def get_selection(infile, inputformat='hdf5',

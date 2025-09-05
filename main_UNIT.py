@@ -1,90 +1,96 @@
+#!/usr/bin/env python3
 """
 ===============================================================================
-                         MASTER'S THESIS PROJECT                                
-    HALO OCCUPATION DISTRIBUTION: GALAXY-HALO CONNECTION ANALYSIS PIPELINE                        
+     GALAXY-HALO ANALYSIS PIPELINE: HOD CALIBRATION FROM SAM CATALOGUES
 ===============================================================================
 
-Author:         Joaquín Delgado Amar
+Author:         Joaquín Delgado Amar, Violeta González Pérez
 Supervisor:     Violeta González Pérez
 Institution:    Universidad Autónoma de Madrid (UAM)
-Date Created:   07 July 2025
-Last Updated:   07 July 2025
+Created:        07 Jul 2025
+Last Updated:   26 Aug 2025
 
 -------------------------------------------------------------------------------
-DESCRIPTION
+PURPOSE
 -------------------------------------------------------------------------------
 
-This script provides a modular and highly configurable pipeline designed to 
-perform comprehensive analyses of galaxy and halo catalogs within cosmological 
-simulations. It is primarily aimed at studying the halo-galaxy connection, 
-particularly focusing on the clustering properties and internal kinematics of 
-Emission Line Galaxies (ELGs).
+Analyse galaxy and halo catalogues from semi-analytical models to measure
+the key ingredients of the galaxy-halo connection and export them as 
+calibrated inputs for HOD-based mock generation.
 
-The analysis pipeline includes:
-    - Galaxy flux selection (flux cuts).
-    - Two-point correlation functions (2PCF) in real and redshift space.
-    - Galactic conformity parameters.
-    - Radial distribution of galaxies within halos.
-    - Velocity profiles (radial and tangential velocities).
-    - Kaiser analysis (to study redshift-space distortions).
-    - Galaxy catalog shuffling (randomization for statistical tests).
+The pipeline measures:
+  • Halo Occupation Distributions (centrals and satellites).
+  • Galactic conformity parameters (mass-dependent and global K1, K2).
+  • Radial satellite profiles (fitted with extended NFW profile (Reyes-Pedraza, 2024)).
+  • Velocity distributions of satellites:
+       - Radial velocities: 3-Gaussian mixture (Reyes-Pedraza, 2024)
+       - Tangential velocities: power-law with exponential cutoff (Reyes-Pedraza, 2024)
+  • Two-point correlation functions (real and redshift space, via Corrfunc).
+  • Kaiser analysis of redshift-space distortions.
+  • Shuffling tests (halo/galaxy reshuffling for conformity baselines).
 
--------------------------------------------------------------------------------
-CONFIGURABILITY
--------------------------------------------------------------------------------
-
-Each analysis step can be independently activated or deactivated using clearly 
-defined boolean flags at the top of the script. This ensures full flexibility, 
-easy debugging, and the possibility of running only subsets of the analysis 
-when needed.
-
-Main Control Flags:
-    - TESTING: Fast, limited data mode for quick testing.
-    - VERBOSE: Enable detailed step-by-step output for debugging purposes.
-    - DO_PLOTS: Generate and save diagnostic and scientific plots.
+All results are stored in HDF5 files (`h2s_output.h5` and shuffled equivalent) 
+and diagnostic plots, ensuring full reproducibility.
 
 -------------------------------------------------------------------------------
-FILE STRUCTURE AND INPUT DATA
+INPUTS
 -------------------------------------------------------------------------------
 
-The pipeline operates on two primary input datasets:
-    1. Galaxy catalogs (in HDF5 or text format), containing positions, velocities, 
-       halo associations, and flux information.
-    2. Halo catalogs (in HDF5 or text format), containing halo IDs, masses, positions, 
-       velocities, and other relevant physical properties.
+1) Galaxy catalogue (HDF5 or text): positions, velocities, halo associations, 
+   fluxes (H_alpha).
+2) Halo catalogue (HDF5 or text): IDs, masses, positions, velocities.
 
-Output data, plots, and intermediate results are systematically stored in dedicated 
-directories ('results/' and 'data/'), ensuring clear organization.
+Optional:
+   • Shuffled halo and galaxy catalogues (auto-generated if enabled).
 
 -------------------------------------------------------------------------------
-MODULES AND DEPENDENCIES
+OUTPUTS
 -------------------------------------------------------------------------------
 
-This pipeline leverages several specialized Python modules stored within the 'src/' 
-directory of the project. Dependencies include:
-    - numpy
-    - matplotlib
-    - h5py
-    - scipy
-    - Corrfunc (for efficient correlation function calculations)
+• Calibrated parameters:
+    - Extended NFW: (N0, alpha, beta, kappa, r0)
+    - Radial velocities: (A_i, mu_i, sigma_i)
+    - Tangential velocities: (v0, epsilon, omega, delta)
+    - Conformity: K1, K2 (per mass bin and global)
 
-All modules are documented individually with clear and comprehensive docstrings.
+• Master HDF5 files:
+    - `h2s_output.h5` (original catalogues)
+    - `h2s_output_shuffled.h5` (if DO_SHUFFLING=True)
+
+• Figures (PNG): HODs, conformity, radial/velocity profiles, 2PCFs, Kaiser tests.
+
+-------------------------------------------------------------------------------
+DEPENDENCIES
+-------------------------------------------------------------------------------
+
+NumPy, SciPy, Matplotlib, h5py, Corrfunc, and project modules:
+  - src.h2s_io            : I/O and filtering
+  - src.h2s_shuffle       : shuffling routines
+  - src.h2s_conformity    : conformity estimators
+  - src.h2s_profile_r     : radial profiles
+  - src.h2s_profile_vel   : velocity profiles
+  - src.h2s_corr          : correlation functions
+  - src.h2s_plots         : plotting utilities
 
 -------------------------------------------------------------------------------
 USAGE
 -------------------------------------------------------------------------------
 
-Adjust the parameters and flags at the top of this script according to your 
-analysis needs, and run the script from the project's root directory:
+1) Set the control flags and input file paths at the top of this script.
+2) Run from the project root directory:
 
 >>> python main.py
+
+Outputs will be stored in `output/` and intermediate data in `data/`.
 
 -------------------------------------------------------------------------------
 CONTACT
 -------------------------------------------------------------------------------
 
-mail: joaquin.delgado@estudiante.uam.es
+joaquin.delgado@estudiante.uam.es
+violetagp@protonmail.com
 
+References: Avila et al. (2020); Vos Ginés et al. (2024); Reyes Pedraza (2024).
 ===============================================================================
 """
 
@@ -109,19 +115,19 @@ Z_SNAP = 1.321               # Snapshot redshift
 
 # Simulation parameters
 BOXSIZE = 1000.0             # Box size in Mpc/h
-FLUX_MIN = 1.32502e-16       # Minimum Halpha flux for ELGs [erg/s/cm^2]
+FLUX_MIN = 1.325e-16       # Minimum Halpha flux for ELGs [erg/s/cm^2]
 DO_FLUX_CUT = True           # If True, applies a flux cut to the galaxy sample
 
 # Input and output file paths
-BASE_DIR = "/home2/guillermo/TFM_JOAQUIN"        # Base directory for the project
+BASE_DIR = "/home2/guillermo/HODfit2sim"        # Base directory for the project
 RESULTS_DIR = os.path.join(BASE_DIR, "output")    # Directory for results  
-DATA_DIR = os.path.join(BASE_DIR, "data")        # Directory for input data files
+DATA_DIR = os.path.join(BASE_DIR, "data/example")        # Directory for input data files
 os.makedirs(RESULTS_DIR, exist_ok=True)          # Create results directory if it doesn't exist
 os.makedirs(DATA_DIR, exist_ok=True)             # Create data directory if it doesn't exist
 
 # Input files
-GALAXY_FILE = os.path.join(DATA_DIR, "UNITSIM1_model_z1.321_ELGs.h5")        # Input galaxy file
-HALO_FILE = os.path.join(DATA_DIR, "Halos_tree_DOC_PID_Vmax_all_Mass.txt")   # Input halo file
+GALAXY_FILE = os.path.join(DATA_DIR, "UNITSIM1_model_z1.321_ELGs_100000.h5")        # Input galaxy file
+HALO_FILE = os.path.join(DATA_DIR, "Halos_tree_DOC_PID_Vmax_all_Mass_100000.txt")   # Input halo file
 
 # Input file formats
 INPUT_GALAXY_FORMAT = "h5"                       # Input Halaxy file format ('h5', 'txt')
@@ -179,7 +185,7 @@ if INPUT_HALO_FORMAT == "txt":
 # ========= 2. Two Point Correlation Function. Real Space ===========
 # ===================================================================
 
-DO_CORRELATION_FUNC_REAL_SPACE = False  # If True, computes the 2PCF in real space
+DO_CORRELATION_FUNC_REAL_SPACE = True  # If True, computes the 2PCF in real space
 NBINS_2PCF_REAL = 80                    # Number of bins
 RMAX_2PCF_REAL = 140.0                  # Maximum distance in Mpc/h
 RMIN_2PCF_REAL = 1.4e-3                 # Minimum distance in Mpc/h
@@ -192,7 +198,7 @@ YLIM_2PCF_RATIO = (0.5, 1.4)            # Y-axis limits for 2PCF ratio plot (Non
 # ======== 3. Two Point Correlation Function. Redshift Space =========
 # ====================================================================
 
-DO_CORRELATION_FUNC_REDSHIFT_SPACE = False  # If True, computes the 2PCF in redshift space
+DO_CORRELATION_FUNC_REDSHIFT_SPACE = True  # If True, computes the 2PCF in redshift space
 NBINS_2PCF_REDSHIFT = 80                   # Number of bins
 RMAX_2PCF_REDSHIFT = 140.0                 # Maximum distance in Mpc/h
 RMIN_2PCF_REDSHIFT = 1.4e-3                # Minimum distance in Mpc/h
@@ -202,13 +208,14 @@ LOS_AXIS = 'z'                             # Line of sight axis for redshift spa
 # ====================================================================
 # ================= 4. Conformity Parameters =========================
 # ====================================================================
+# If DO_PLOTS, plots the Halo Mass Function (HMF) and Halo Occupation Distribution (HOD).
 
 DO_CONFORMITY = True                      # If True, computes conformity parameters
 M_MIN_CONFORMITY = 10.5                   # Minimum halo mass for conformity analysis (logarithmic scale)
 M_MAX_CONFORMITY = 14.5                   # Maximum halo mass for conformity analysis (logarithmic scale)
 N_BINS_CONFORMITY = 70                    # Number of bins for halo mass in conformity analysis
 BIN_WIDTH_CONFORMITY = 0.057              # Width of each bin in logarithmic scale
-DO_HMF_COMPARISON = False                 # If True, compares halo mass functions (HMF) between original and shuffled catalogs
+DO_HMF_COMPARISON = True                  # If True, compares halo mass functions (HMF) between original and shuffled catalogs
 BINNING_HMF= np.linspace(10.5, 14.5, 71)  # Mass binning for HMF comparison in logarithmic scale
 
 # ====================================================================
@@ -242,10 +249,10 @@ MANUAL_PARAMS_VTAN = None                 # Manual parameters for fitting (if ne
 # ================= 10. Kaiser Analysis ==============================
 # ====================================================================
 
-DO_KAISER_ANALYSIS = False            # If True, performs Kaiser analysis
+DO_KAISER_ANALYSIS = True            # If True, performs Kaiser analysis
 BIAS = 1.86                          # Bias parameter for ELGs
 GAMMA = 0.55                         # Gamma parameter for Kaiser analysis
-DO_KAISER_RATIO = False               # If True, computes Kaiser ratio between redshift and real space
+DO_KAISER_RATIO = True               # If True, computes Kaiser ratio between redshift and real space
 XLIM_KAISER = (0.1,100)              # X-axis limits for Kaiser ratio plot (None for automatic)
 YLIM_KAISER = (0.75,1.5)             # Y-axis limits for Kaiser ratio plot (None for automatic)
 
@@ -253,7 +260,7 @@ YLIM_KAISER = (0.75,1.5)             # Y-axis limits for Kaiser ratio plot (None
 # ===================== 11. Shuffling ================================
 # ====================================================================
 
-DO_SHUFFLING = False               # If True, shuffles the galaxy catalogue
+DO_SHUFFLING = True               # If True, shuffles the galaxy catalogue
 N_BINS_SHUFFLING = 70              # Number of bins for halo mass in shuffling
 M_MIN_SHUFFLING = 10.5             # Minimum halo mass for shuffling (logarithmic scale)
 M_MAX_SHUFFLING = 14.5             # Maximum halo mass for shuffling (logarithmic scale)
@@ -412,13 +419,15 @@ def main():
 
     if DO_CONFORMITY:
         print("Calculating conformity parameters...")
-        from src.h2s_conformity import compute_conformity_parameters
+        from src.h2s_conformity import compute_conformity_parameters, compute_conformity_parameters_shuffled
 
         if DO_FLUX_CUT:
             CONFORMITY = os.path.join(RESULTS_DIR, f"conformity_{FLUX_MIN}.h5")
+            CONFORMITY_SHUFFLED = os.path.join(RESULTS_DIR, f"conformity_shuffled_{FLUX_MIN}.h5")
         else:
             CONFORMITY = os.path.join(RESULTS_DIR, "conformity.h5")
-        
+            CONFORMITY_SHUFFLED = os.path.join(RESULTS_DIR, "conformity_shuffled.h5")
+
         compute_conformity_parameters(galaxy_file=FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE,
                                       halo_file= HALO_FILE, M_min= M_MIN_CONFORMITY,
                                       M_max= M_MAX_CONFORMITY, N_bins=N_BINS_CONFORMITY,
@@ -426,7 +435,16 @@ def main():
                                       output_file=CONFORMITY, halo_pid=HALO_PID_KEY, halo_mass=HALO_MASS_KEY,
                                       verbose=VERBOSE, gal_host_id= GALAXY_HOST_ID_KEY,
                                       gal_main_id= GALAXY_MAIN_ID_KEY, gal_main_mass= GALAXY_MAIN_MASS_KEY)
-            
+        
+        if DO_SHUFFLING:
+            compute_conformity_parameters_shuffled(galaxy_file=SHUFFLED_GALAXY_FILE,
+                                                   halo_file=HALO_FILE, M_min=M_MIN_CONFORMITY,
+                                                   M_max=M_MAX_CONFORMITY, N_bins=N_BINS_CONFORMITY,
+                                                   galaxy_format=INPUT_GALAXY_FORMAT, halo_format=INPUT_HALO_FORMAT,
+                                                   output_file=CONFORMITY_SHUFFLED, halo_pid=HALO_PID_KEY, halo_mass=HALO_MASS_KEY,
+                                                   verbose=VERBOSE, gal_is_central="is_central",
+                                                   gal_main_id=GALAXY_MAIN_ID_KEY, gal_main_mass=GALAXY_MAIN_MASS_KEY)
+
         if DO_PLOTS:
             from src.h2s_plots import plot_hmf, plot_hod
             if DO_FLUX_CUT:
@@ -455,13 +473,15 @@ def main():
     
     if DO_RADIAL_PROFILE:
         print("Calculating radial profile...")
-        from src.h2s_profile_r import compute_radial_profile
+        from src.h2s_profile_r import compute_radial_profile, compute_radial_profile_shuffled
 
         if DO_FLUX_CUT:
             RADIAL_PROFILE = os.path.join(RESULTS_DIR, f"radial_profile_{FLUX_MIN}.h5")
+            RADIAL_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, f"radial_profile_shuffled_{FLUX_MIN}.h5")
         else:
             RADIAL_PROFILE = os.path.join(RESULTS_DIR, "radial_profile.h5")
-        
+            RADIAL_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, "radial_profile_shuffled.h5")
+
         compute_radial_profile(galaxy_file=FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE,
                                halo_file=HALO_FILE, output_file=RADIAL_PROFILE, verbose=VERBOSE,
                                boxsize=BOXSIZE, bins=BINNING_RADIAL, halo_format=INPUT_HALO_FORMAT,
@@ -471,6 +491,16 @@ def main():
                                galaxy_x_key=GALAXY_XPOS_KEY, galaxy_y_key=GALAXY_YPOS_KEY,
                                galaxy_z_key=GALAXY_ZPOS_KEY)
         
+        if DO_SHUFFLING:
+            compute_radial_profile_shuffled(galaxy_file=SHUFFLED_GALAXY_FILE, halo_file=HALO_FILE,
+                                              output_file=RADIAL_PROFILE_SHUFFLED, verbose=VERBOSE,
+                                              boxsize=BOXSIZE, bins=BINNING_RADIAL, halo_format=INPUT_HALO_FORMAT,
+                                              halo_id_key=HALO_ID_KEY, halo_pid_key=HALO_PID_KEY, halo_x_key=HALO_XPOS_KEY,
+                                              halo_y_key=HALO_YPOS_KEY, halo_z_key=HALO_ZPOS_KEY,
+                                              galaxy_is_central_key='is_central', galaxy_id_key=GALAXY_MAIN_ID_KEY,
+                                              galaxy_x_key=GALAXY_XPOS_KEY, galaxy_y_key=GALAXY_YPOS_KEY,
+                                              galaxy_z_key=GALAXY_ZPOS_KEY)
+
         if DO_PLOTS:
             from src.h2s_plots import plot_radial_profile
             if DO_FLUX_CUT:
@@ -485,10 +515,15 @@ def main():
             from src.h2s_profile_r import fit_radial_profile
             if DO_FLUX_CUT:
                 FIT_RADIAL_PROFILE_PARAMS = os.path.join(RESULTS_DIR, f"radial_profile_fit_params{FLUX_MIN}.txt")
+                FIT_RADIAL_PROFILE_PARAMS_SHUFFLED = os.path.join(RESULTS_DIR, f"radial_profile_fit_params_shuffled{FLUX_MIN}.txt")
             else:
                 FIT_RADIAL_PROFILE_PARAMS = os.path.join(RESULTS_DIR, "radial_profile_fit_params.txt")
+                FIT_RADIAL_PROFILE_PARAMS_SHUFFLED = os.path.join(RESULTS_DIR, "radial_profile_fit_params_shuffled.txt")
             fit_radial_profile(profile_file=RADIAL_PROFILE, output_params_file=FIT_RADIAL_PROFILE_PARAMS,
                                initial_guess= INITAL_GUESS_RADIAL, bounds=None, verbose=VERBOSE)
+            if DO_SHUFFLING:
+                fit_radial_profile(profile_file=RADIAL_PROFILE_SHUFFLED, output_params_file=FIT_RADIAL_PROFILE_PARAMS_SHUFFLED,
+                                   initial_guess= INITAL_GUESS_RADIAL, bounds=None, verbose=VERBOSE)
             if DO_PLOTS:
                 from src.h2s_plots import plot_radial_profile_fit
                 if DO_FLUX_CUT:
@@ -497,6 +532,7 @@ def main():
                     FIT_RADIAL_PROFILE = os.path.join(RESULTS_DIR, "radial_profile_fit.png")
                 
                 params_radial = np.loadtxt(FIT_RADIAL_PROFILE_PARAMS, delimiter=",", skiprows=1).flatten()
+                params_radial_shuffled = np.loadtxt(FIT_RADIAL_PROFILE_PARAMS_SHUFFLED, delimiter=",", skiprows=1).flatten()
                 plot_radial_profile_fit(profile_file=RADIAL_PROFILE, output_png=FIT_RADIAL_PROFILE,
                                         params = params_radial, show=True, loglog=True)
 
@@ -504,12 +540,14 @@ def main():
 
     if DO_VR_PROFILE:
         print("Calculating radial velocity profile...")
-        from src.h2s_profile_vel import compute_vr_profile
+        from src.h2s_profile_vel import compute_vr_profile, compute_vr_profile_shuffled
 
         if DO_FLUX_CUT:
             VR_PROFILE = os.path.join(RESULTS_DIR, f"vr_profile_{FLUX_MIN}.h5")
+            VR_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, f"vr_profile_shuffled_{FLUX_MIN}.h5")
         else:
             VR_PROFILE = os.path.join(RESULTS_DIR, "vr_profile.h5")
+            VR_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, "vr_profile_shuffled.h5")
 
         compute_vr_profile(galaxy_file=FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE,
                             halo_file=HALO_FILE, output_file=VR_PROFILE,verbose=VERBOSE, boxsize=BOXSIZE, 
@@ -520,8 +558,22 @@ def main():
                             galaxy_main_id_key=GALAXY_MAIN_ID_KEY, galaxy_x_key=GALAXY_XPOS_KEY,
                             galaxy_y_key=GALAXY_YPOS_KEY, galaxy_z_key=GALAXY_ZPOS_KEY,
                             galaxy_vx_key=GALAXY_XVEL_KEY, galaxy_vy_key=GALAXY_YVEL_KEY,
-                          galaxy_vz_key=GALAXY_ZVEL_KEY)
-            
+                            galaxy_vz_key=GALAXY_ZVEL_KEY)
+        
+        if DO_SHUFFLING:
+            compute_vr_profile_shuffled(galaxy_file=SHUFFLED_GALAXY_FILE,
+                                         halo_file=HALO_FILE, output_file=VR_PROFILE_SHUFFLED, verbose=VERBOSE,
+                                         boxsize=BOXSIZE, bins=BINNING_VR, halo_format=INPUT_HALO_FORMAT,
+                                         halo_id_key=HALO_ID_KEY, halo_pid_key=HALO_PID_KEY,
+                                         halo_x_key=HALO_XPOS_KEY, halo_y_key=HALO_YPOS_KEY,
+                                         halo_z_key=HALO_ZPOS_KEY, halo_vx_key=HALO_XVEL_KEY,
+                                         halo_vy_key=HALO_YVEL_KEY, halo_vz_key=HALO_ZVEL_KEY,
+                                         galaxy_is_central_key="is_central",
+                                         galaxy_main_id_key=GALAXY_MAIN_ID_KEY, galaxy_x_key=GALAXY_XPOS_KEY,
+                                         galaxy_y_key=GALAXY_YPOS_KEY, galaxy_z_key=GALAXY_ZPOS_KEY,
+                                         galaxy_vx_key=GALAXY_XVEL_KEY, galaxy_vy_key=GALAXY_YVEL_KEY,
+                                         galaxy_vz_key=GALAXY_ZVEL_KEY)
+
         if DO_PLOTS:
             from src.h2s_plots import plot_vr_distribution
             if DO_FLUX_CUT:
@@ -536,23 +588,32 @@ def main():
             if DO_FLUX_CUT:
                 FIT_VR_PROFILE = os.path.join(RESULTS_DIR, f"vr_profile_fit_{FLUX_MIN}.png")
                 FIT_VR_PROFILE_PARAMS = os.path.join(RESULTS_DIR, f"vr_profile_fit_params_{FLUX_MIN}.txt")
+                FIT_VR_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, f"vr_profile_fit_shuffled_{FLUX_MIN}.png")
+                FIT_VR_PROFILE_PARAMS_SHUFFLED = os.path.join(RESULTS_DIR, f"vr_profile_fit_params_shuffled_{FLUX_MIN}.txt")
             else:
                 FIT_VR_PROFILE_PARAMS = os.path.join(RESULTS_DIR, "vr_profile_fit_params.txt")
                 FIT_VR_PROFILE = os.path.join(RESULTS_DIR, "vr_profile_fit.png")
+                FIT_VR_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, "vr_profile_fit_shuffled.png")
+                FIT_VR_PROFILE_PARAMS_SHUFFLED = os.path.join(RESULTS_DIR, "vr_profile_fit_params_shuffled.txt")
 
             fit_vr_profile(vr_profile_file=VR_PROFILE, plot=True, output_png=FIT_VR_PROFILE,
                            loglog=False, manual_params=MANUAL_PARAMS_VR, output_params_file=FIT_VR_PROFILE_PARAMS)
+            if DO_SHUFFLING:
+                fit_vr_profile(vr_profile_file=VR_PROFILE_SHUFFLED, plot=True, output_png=FIT_VR_PROFILE_SHUFFLED,
+                               loglog=False, manual_params=MANUAL_PARAMS_VR, output_params_file=FIT_VR_PROFILE_PARAMS_SHUFFLED)
 
     # ========== Calculate Tangential Velocity Profile ===========
 
     if DO_VTAN_PROFILE:
         print("Calculating tangential velocity profile...")
-        from src.h2s_profile_vel import compute_vtan_profile
+        from src.h2s_profile_vel import compute_vtan_profile, compute_vtan_profile_shuffled
         if DO_FLUX_CUT:
             VTAN_PROFILE = os.path.join(RESULTS_DIR, f"vtan_profile_{FLUX_MIN}.h5")
+            VTAN_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, f"vtan_profile_shuffled_{FLUX_MIN}.h5")
         else:
             VTAN_PROFILE = os.path.join(RESULTS_DIR, "vtan_profile.h5")
-        
+            VTAN_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, "vtan_profile_shuffled.h5")
+
         compute_vtan_profile(galaxy_file=FILTERED_GALAXIES if DO_FLUX_CUT else GALAXY_FILE,
                              halo_file=HALO_FILE, output_file=VTAN_PROFILE, verbose=VERBOSE, boxsize=BOXSIZE,
                              bins=BINNING_VTAN, halo_format=INPUT_HALO_FORMAT, halo_id_key=HALO_ID_KEY,
@@ -563,6 +624,21 @@ def main():
                              galaxy_y_key=GALAXY_YPOS_KEY, galaxy_z_key=GALAXY_ZPOS_KEY,
                              galaxy_vx_key=GALAXY_XVEL_KEY, galaxy_vy_key=GALAXY_YVEL_KEY,
                              galaxy_vz_key=GALAXY_ZVEL_KEY)
+        
+        if DO_SHUFFLING:
+            compute_vtan_profile_shuffled(galaxy_file=SHUFFLED_GALAXY_FILE,
+                                           halo_file=HALO_FILE, output_file=VTAN_PROFILE_SHUFFLED, verbose=VERBOSE,
+                                           boxsize=BOXSIZE, bins=BINNING_VTAN, halo_format=INPUT_HALO_FORMAT,
+                                           halo_id_key=HALO_ID_KEY, halo_pid_key=HALO_PID_KEY,
+                                           halo_x_key=HALO_XPOS_KEY, halo_y_key=HALO_YPOS_KEY,
+                                           halo_z_key=HALO_ZPOS_KEY, halo_vx_key=HALO_XVEL_KEY,
+                                           halo_vy_key=HALO_YVEL_KEY, halo_vz_key=HALO_ZVEL_KEY,
+                                           galaxy_is_central_key="is_central",
+                                           galaxy_main_id_key=GALAXY_MAIN_ID_KEY, galaxy_x_key=GALAXY_XPOS_KEY,
+                                           galaxy_y_key=GALAXY_YPOS_KEY, galaxy_z_key=GALAXY_ZPOS_KEY,
+                                           galaxy_vx_key=GALAXY_XVEL_KEY, galaxy_vy_key=GALAXY_YVEL_KEY,
+                                           galaxy_vz_key=GALAXY_ZVEL_KEY)
+
         if DO_PLOTS:
             from src.h2s_plots import plot_vtan_distribution
             if DO_FLUX_CUT:
@@ -577,12 +653,19 @@ def main():
             if DO_FLUX_CUT:
                 FIT_VTAN_PROFILE = os.path.join(RESULTS_DIR, f"vtan_profile_fit_{FLUX_MIN}.png")
                 FIT_VTAN_PROFILE_PARAMS = os.path.join(RESULTS_DIR, f"vtan_profile_fit_params_{FLUX_MIN}.txt")
+                FIT_VTAN_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, f"vtan_profile_fit_shuffled_{FLUX_MIN}.png")
+                FIT_VTAN_PROFILE_PARAMS_SHUFFLED = os.path.join(RESULTS_DIR, f"vtan_profile_fit_params_shuffled_{FLUX_MIN}.txt")
             else:
                 FIT_VTAN_PROFILE = os.path.join(RESULTS_DIR, "vtan_profile_fit.png")
                 FIT_VTAN_PROFILE_PARAMS = os.path.join(RESULTS_DIR, "vtan_profile_fit_params.txt")
+                FIT_VTAN_PROFILE_SHUFFLED = os.path.join(RESULTS_DIR, "vtan_profile_fit_shuffled.png")
+                FIT_VTAN_PROFILE_PARAMS_SHUFFLED = os.path.join(RESULTS_DIR, "vtan_profile_fit_params_shuffled.txt")
             fit_vtheta_profile(vtheta_profile_file=VTAN_PROFILE, plot=True, output_png=FIT_VTAN_PROFILE, output_params_file= FIT_VTAN_PROFILE_PARAMS,
                                 loglog=False, manual_params= MANUAL_PARAMS_VTAN)
-                                      
+            if DO_SHUFFLING:
+                fit_vtheta_profile(vtheta_profile_file=VTAN_PROFILE_SHUFFLED, plot=True, output_png=FIT_VTAN_PROFILE_SHUFFLED,
+                                   loglog=False, manual_params=MANUAL_PARAMS_VTAN, output_params_file=FIT_VTAN_PROFILE_PARAMS_SHUFFLED)
+
     # ================= Kaiser Analysis =================
 
     if DO_KAISER_ANALYSIS:
@@ -742,6 +825,127 @@ def main():
         data.create_dataset("Nsat_vtan", data=Nsat_vtan)
 
     print(f"\n[INFO] Master output file written: {MASTER_OUTPUT}\n")
+    if DO_SHUFFLING:
+        # Path for the master output file
+        MASTER_OUTPUT_SHUFFLED = os.path.join(RESULTS_DIR, "h2s_output_shuffled.h5")
+
+        # Load per-bin data from conformity, radial profile, VR, and VTAN files
+        with h5py.File(CONFORMITY_SHUFFLED, "r") as f_conf, \
+             h5py.File(RADIAL_PROFILE_SHUFFLED, "r") as f_radial, \
+             h5py.File(VR_PROFILE_SHUFFLED, "r") as f_vr, \
+             h5py.File(VTAN_PROFILE_SHUFFLED, "r") as f_vtan:
+
+           # ---- GLOBAL CONSTANTS/HEADER ----
+           # Conformity global parameters
+            k1_global = f_conf["data/global/k1_global"][()]
+            k2_global = f_conf["data/global/k2_global"][()]
+
+            # Cosmology & run config
+            z_snap = Z_SNAP
+            omega_m = OMEGA_M
+            omega_l = OMEGA_L
+            h_param = h
+            boxsize = BOXSIZE
+
+            # Fit parameters: must have been assigned after running the fits!
+
+            params_vtan_shuffled = np.loadtxt(FIT_VTAN_PROFILE_PARAMS_SHUFFLED, delimiter=",", skiprows=1).flatten()
+            params_vr_shuffled = np.loadtxt(FIT_VR_PROFILE_PARAMS_SHUFFLED, delimiter=",", skiprows=1).flatten()
+            alpha, beta, r0, N0, kappa = params_radial_shuffled
+            vtan_y0, vtan_alpha, vtan_beta, vtan_kappa = params_vtan_shuffled
+            (vr_A1, vr_mu1, vr_sigma1, 
+             vr_A2, vr_mu2, vr_sigma2, 
+             vr_A3, vr_mu3, vr_sigma3) = params_vr_shuffled
+
+            # ---- DATA BLOCKS: Load per-bin data from each file ----
+            # Conformity
+            conf_bins = f_conf["data/bins"]
+            M_min = conf_bins["M_min_bin"][:]
+            M_max = conf_bins["M_max_bin"][:]
+            N_halo = conf_bins["N_Halos"][:]
+            k1 = conf_bins["k1"][:]
+            k2 = conf_bins["k2"][:]
+            Nsat = conf_bins["N_S"][:]    # satellites per bin
+            Ncen = conf_bins["N_C"][:]    # centrals per bin
+
+            # Radial profile
+            r_centers = f_radial['radial_bins'][:]
+            Nsat_r = f_radial['counts'][:]
+            dr = np.diff(r_centers)
+            edges = np.concatenate(([r_centers[0] - dr[0]/2], r_centers[:-1] + dr/2, [r_centers[-1] + dr[-1]/2]))
+            r_min = edges[:-1]
+            r_max = edges[1:]
+
+            # VR profile
+            vr_centers = f_vr["velocity_bins"][:]
+            dvr = np.diff(vr_centers)
+            vr_edges = np.concatenate(([vr_centers[0] - dvr[0]/2], vr_centers[:-1] + dvr/2, [vr_centers[-1] + dvr[-1]/2]))
+            Nsat_vr = f_vr["density"][:]
+            vr_min = vr_edges[:-1]
+            vr_max = vr_edges[1:]
+
+            # VTAN profile
+            vtan_centers = f_vtan["velocity_bins"][:]
+            dvtan = np.diff(vtan_centers)
+            vtan_edges = np.concatenate(([vtan_centers[0] - dvtan[0]/2], vtan_centers[:-1] + dvtan/2, [vtan_centers[-1] + dvtan[-1]/2]))
+            Nsat_vtan = f_vtan["density"][:]
+            vtan_min = vtan_edges[:-1]
+            vtan_max = vtan_edges[1:]
+
+        # --------- Write master output HDF5 ---------
+        with h5py.File(MASTER_OUTPUT_SHUFFLED, "w") as f:
+            # HEADER group with attributes
+            header = f.create_group("header")
+            header.attrs["K1_global"] = k1_global
+            header.attrs["K2_global"] = k2_global
+            header.attrs["z_snap"] = z_snap
+            header.attrs["omega_m"] = omega_m
+            header.attrs["omega_l"] = omega_l
+            header.attrs["h"] = h_param
+            header.attrs["boxsize"] = boxsize
+            header.attrs["alpha"] = alpha
+            header.attrs["beta"] = beta
+            header.attrs["kappa"] = kappa
+            header.attrs["N0"] = N0
+            header.attrs["r0"] = r0
+            header.attrs["vtan_y0"] = vtan_y0
+            header.attrs["vtan_alpha"] = vtan_alpha
+            header.attrs["vtan_beta"] = vtan_beta
+            header.attrs["vtan_kappa"] = vtan_kappa
+            header.attrs["vr_A1"] = vr_A1
+            header.attrs["vr_mu1"] = vr_mu1
+            header.attrs["vr_sigma1"] = vr_sigma1
+            header.attrs["vr_A2"] = vr_A2
+            header.attrs["vr_mu2"] = vr_mu2
+            header.attrs["vr_sigma2"] = vr_sigma2
+            header.attrs["vr_A3"] = vr_A3
+            header.attrs["vr_mu3"] = vr_mu3
+            header.attrs["vr_sigma3"] = vr_sigma3
+
+            # DATA group with all bin-wise arrays
+            data = f.create_group("data")
+            # Conformity
+            data.create_dataset("M_min", data=M_min)
+            data.create_dataset("M_max", data=M_max)
+            data.create_dataset("N_halo", data=N_halo)
+            data.create_dataset("k1", data=k1)
+            data.create_dataset("k2", data=k2)
+            data.create_dataset("Nsat", data=Nsat)
+            data.create_dataset("Ncen", data=Ncen)
+            # Radial profile
+            data.create_dataset("r_min", data=r_min)
+            data.create_dataset("r_max", data=r_max)
+            data.create_dataset("Nsat_r", data=Nsat_r)
+            # VR profile
+            data.create_dataset("vr_min", data=vr_min)
+            data.create_dataset("vr_max", data=vr_max)
+            data.create_dataset("Nsat_vr", data=Nsat_vr)
+            # VTAN profile
+            data.create_dataset("vtan_min", data=vtan_min)
+            data.create_dataset("vtan_max", data=vtan_max)
+            data.create_dataset("Nsat_vtan", data=Nsat_vtan)
+
+        print(f"\n[INFO] Master output file for shuffled catalog written: {MASTER_OUTPUT_SHUFFLED}\n")
 
 if __name__ == "__main__":
     main()

@@ -234,16 +234,40 @@ def compute_conformity_parameters(
         N_swoc.append(n_swoc)
         N_H.append(n_h)
 
-        # per‐bin k1, k2
-        if n_c>0 and n_s>0 and n_h>0:
-            fracC = n_c / n_h
-            k1b   = (n_swc * n_h) / (n_c * n_s)
-            k2b   = (1 - k1b*fracC) / (1 - fracC) if (1 - fracC)!=0 else 0.0
-        else:
-            k1b = k2b = 0.0
+        if n_swc != 0.0 and n_swoc != 0.0:
+            k1 = (n_swc)*(1./n_c)*(1./n_s)*n_h
+            k2 = (1 - k1 * (n_c/n_h))/(1 - (n_c/n_h))
+            K1.append(float(k1))
+            K2.append(float(k2))
 
-        K1.append(k1b)
-        K2.append(k2b)
+        elif n_swc == 0.0 and n_swoc != 0.0:
+            k1 = 0.0
+            k2 = (n_swoc)*(1./(n_h-n_c))*(1./n_s)*n_h
+            K1.append(k1)
+            K2.append(k2)
+
+        elif n_swc != 0.0 and n_swoc == 0.0:
+            k1 = (n_swc)*(1./n_c)*(1./n_s)*n_h
+            k2 = 0.0
+            K1.append(k1)
+            K2.append(k2)
+
+        else:
+            k1 = 0.0
+            k2 = 0.0
+            K1.append(k1)
+            K2.append(k2)
+
+        # per‐bin k1, k2
+        #if n_c>0 and n_s>0 and n_h>0:
+            #fracC = n_c / n_h
+            #k1b   = (n_swc * n_h) / (n_c * n_s)
+            #k2b   = (1 - k1b*fracC) / (1 - fracC) if (1 - fracC)!=0 else 0.0
+        #else:
+            #k1b = k2b = 0.0
+
+        #K1.append(k1b)
+        #K2.append(k2b)
 
     # 5) Global k1, k2
     N_C   = np.array(N_C)
@@ -264,6 +288,223 @@ def compute_conformity_parameters(
         k2_global = sum(N_swoc)/(sum(np.array(N_S) * (1 - np.array(Ncmv))))
     else:
         k1_global = k2_global = 0.0
+
+    if verbose:
+        print(f"Global k1 = {k1_global:.4f}, k2 = {k2_global:.4f}")
+
+    # 6) Save to H5
+    create_dir(os.path.dirname(output_file))
+    with h5py.File(output_file, "w") as out:
+        grp = out.create_group("data")
+        bins = grp.create_group("bins")
+        bins.create_dataset("M_min_bin", data=np.array(M_min_bin))
+        bins.create_dataset("M_max_bin", data=np.array(M_max_bin))
+        bins.create_dataset("N_C",        data=N_C)
+        bins.create_dataset("N_S",        data=N_S)
+        bins.create_dataset("N_swc",      data=N_swc)
+        bins.create_dataset("N_swoc",     data=N_swoc)
+        bins.create_dataset("N_Halos",    data=N_H)
+        bins.create_dataset("k1",         data=np.array(K1))
+        bins.create_dataset("k2",         data=np.array(K2))
+
+        glob = grp.create_group("global")
+        glob.create_dataset("k1_global", data=k1_global)
+        glob.create_dataset("k2_global", data=k2_global)
+
+    if verbose:
+        print("Results written to:", output_file)
+
+def compute_conformity_parameters_shuffled(
+    halo_file,
+    galaxy_file,
+    M_min,
+    M_max,
+    N_bins,
+    output_file,
+    halo_format="txt",
+    halo_pid = 13,       
+    halo_mass = 17,       
+    galaxy_format="h5",
+    gal_is_central="is_central", 
+    gal_main_id="MainHaloID",
+    gal_main_mass="MainMhalo",    
+    verbose=True
+):
+    """
+    Computes the satellite conformity parameters k1 and k2 as a function of halo mass.
+
+    This function identifies central and satellite galaxies, separates satellites into
+    those with/without a central galaxy in the same halo, bins all relevant quantities
+    by halo mass, and computes conformity parameters per bin and globally. Results
+    are saved in an output H5 file for further analysis.
+
+    Parameters
+    ----------
+    halo_file : str
+        Path to the input halo catalog (TXT or F5).
+    galaxy_file : str
+        Path to the input galaxy catalog (TXT or F5), previously filtered as needed.
+    M_min : float
+        Lower limit of halo mass (in log10 solar masses) for binning.
+    M_max : float
+        Upper limit of halo mass (in log10 solar masses) for binning.
+    N_bins : int
+        Number of mass bins to use for analysis.
+    output_file : str
+        Path for the H5 output file to store the results.
+    halo_format : {'txt', 'h5'}, optional
+        Format of the halo file. Default is 'txt'.
+    halo_pid : int or str, optional
+        Column index (if txt) or dataset name (if h5) for PID. Default is 13.
+    halo_mass : int or str, optional
+        Column index (if txt) or dataset name (if h5) for halo mass. Default is 17.
+    galaxy_format : {'txt', 'h5'}, optional
+        Format of the galaxy file. Default is 'h5'.
+    gal_host_id : int or str, optional
+        Column index (if txt) or dataset name (if h5) for HostHaloID.
+    gal_main_id : int or str, optional
+        Column index (if txt) or dataset name (if h5) for MainHaloID.
+    gal_main_mass : int or str, optional
+        Column index (if txt) or dataset name (if h5) for halo mass.
+    verbose : bool, optional
+        If True, prints progress and status messages.
+
+    Returns
+    -------
+    None
+
+    Outputs
+    -------
+    An H5 file is written to `output_file` containing:
+        - Bin edges and counts for centrals, satellites, satellites with/without a central, and halos.
+        - Per-bin k1 and k2 parameters.
+        - Global k1 and k2 parameters.
+
+    Raises
+    ------
+    ValueError
+        If any file format or required field is not recognized.
+
+    Notes
+    -----
+    Central galaxies are defined as those with HostHaloID == MainHaloID.
+    Satellite galaxies are those with HostHaloID != MainHaloID.
+    Satellites are further split into those with a central galaxy in their halo and those without.
+    """
+
+    # 1) Read & filter host halos (PID == -1 in col 13, logMvir from col 17)
+    pid, mass = load_halos(halo_file, halo_format, halo_pid, halo_mass)
+    mask_host = (pid == -1.0)
+    logM_halos = np.log10(mass[mask_host])
+
+    if verbose:
+        print(f"Loaded {np.sum(mask_host)} host halos from {halo_file}")
+
+    with h5py.File(galaxy_file, "r") as f:
+            is_central = np.asarray(f[gal_is_central][:])
+            main_id = np.asarray(f[gal_main_id][:])
+            main_mass    = np.asarray(f[gal_main_mass][:])
+
+    # 2) Read galaxies (no further flux cut!
+    
+    logM_gal = np.log10(main_mass)
+    is_c = (is_central == 1)
+    is_s = ~is_c
+
+    if verbose:
+        print(f"Loaded {len(logM_gal)} galaxies from {galaxy_file}")
+    
+    # ========= KEY PART: does each halo have a central? =========
+    # Group by MainHaloID and compute "has_central" per halo efficiently.
+    order = np.argsort(main_id)
+    mid_sorted = main_id[order]
+    cen_sorted = is_c[order].astype(np.int8)
+
+    # start indices of groups (where halo id changes)
+    grp_starts = np.r_[0, np.nonzero(mid_sorted[1:] != mid_sorted[:-1])[0] + 1]
+    # for each group, max of is_c (i.e. any central?)
+    has_central_by_group = np.maximum.reduceat(cen_sorted, grp_starts).astype(bool)
+    unique_ids = mid_sorted[grp_starts]  # one id per group (sorted)
+
+    # Map 'has_central' back to every galaxy (vectorized)
+    pos = np.searchsorted(unique_ids, main_id)
+    halo_has_central = has_central_by_group[pos]
+
+    # Satellites WITH a central in their own halo / WITHOUT a central
+    sat_with_c_mask  = is_s &  halo_has_central
+    sat_without_mask = is_s & ~halo_has_central
+
+    # Mass arrays (in log10) for each subset
+    C_m    = logM_gal[is_c]
+    S_m    = logM_gal[is_s]
+    S_mwc  = logM_gal[sat_with_c_mask]    # satellites with central
+    S_mwoc = logM_gal[sat_without_mask]   # satellites without central
+
+    # --- sanity check: per bin, N_S should equal N_swc + N_swoc
+    # (lo comprobaremos tras el binning)
+
+    # ========= BINNING =========
+    edges = np.linspace(M_min, M_max, N_bins + 1)
+    M_min_bin = edges[:-1]
+    M_max_bin = edges[1:]
+
+    N_C,   _ = np.histogram(C_m,    bins=edges)
+    N_S,   _ = np.histogram(S_m,    bins=edges)
+    N_swc, _ = np.histogram(S_mwc,  bins=edges)
+    N_swoc,_ = np.histogram(S_mwoc, bins=edges)
+    N_H,   _ = np.histogram(logM_halos, bins=edges)
+
+    # Optional: assert consistency
+    if verbose:
+        bad = (N_S != (N_swc + N_swoc))
+        if np.any(bad):
+            idx = np.where(bad)[0]
+            print(f"[WARN] In {len(idx)} bins N_S != N_swc + N_swoc; indices: {idx}")
+
+    # ========= k1, k2 per bin (keeping your formulas/logic) =========
+    K1 = np.zeros_like(N_S, dtype=float)
+    K2 = np.zeros_like(N_S, dtype=float)
+
+    for i in range(N_bins):
+        n_c, n_s, n_swc_i, n_swoc_i, n_h = N_C[i], N_S[i], N_swc[i], N_swoc[i], N_H[i]
+
+        if n_swc_i != 0 and n_swoc_i != 0 and n_c > 0 and n_s > 0:
+            k1 = (n_swc_i) * (1.0/n_c) * (1.0/n_s) * n_h
+            k2 = (1 - k1 * (n_c/n_h)) / (1 - (n_c/n_h)) if (1 - (n_c/n_h)) != 0 else 0.0
+        elif n_swc_i == 0 and n_swoc_i != 0 and (n_h - n_c) > 0 and n_s > 0:
+            k1 = 0.0
+            k2 = (n_swoc_i) * (1.0/(n_h - n_c)) * (1.0/n_s) * n_h
+        elif n_swc_i != 0 and n_swoc_i == 0 and n_c > 0 and n_s > 0:
+            k1 = (n_swc_i) * (1.0/n_c) * (1.0/n_s) * n_h
+            k2 = 0.0
+        else:
+            k1 = 0.0
+            k2 = 0.0
+
+        K1[i] = float(k1)
+        K2[i] = float(k2)
+
+    # Convert to np.array if needed later
+    N_C   = np.asarray(N_C)
+    N_S   = np.asarray(N_S)
+    N_swc = np.asarray(N_swc)
+    N_swoc= np.asarray(N_swoc)
+    N_H   = np.asarray(N_H)
+
+    # ========= global k1, k2 (keeping your approach) =========
+    sum_c   = N_C.sum()
+    sum_s   = N_S.sum()
+    sum_swc = N_swc.sum()
+    sum_h   = N_H.sum()
+
+    Ncmv = np.array([ N_C[i]/N_H[i] if N_H[i] > 0 else 0.0 for i in range(len(N_H)) ])
+
+    if sum_s > 0 and sum_h > 0 and Ncmv.sum() > 0:
+        k1_global = sum_swc / np.sum(N_S * Ncmv)
+        k2_global = (N_swoc.sum()) / np.sum(N_S * (1 - Ncmv))
+    else:
+        k1_global = 0.0
+        k2_global = 0.0
 
     if verbose:
         print(f"Global k1 = {k1_global:.4f}, k2 = {k2_global:.4f}")
