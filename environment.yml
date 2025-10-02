@@ -19,17 +19,8 @@ dependencies:
   - git
   
   # Data handling and I/O
-  - h5py  
-
-  #- typer
-  #- loguru
-  #- tqdm
-  #- ruff
-  #- pytest
+  - h5py
   
   - pip
   - pip:
-    #- python-dotenv
-    #- mkdocs
     - Corrfunc
-      # - memory_profiler
